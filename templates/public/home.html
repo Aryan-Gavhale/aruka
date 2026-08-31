@@ -1,0 +1,257 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import sec_head, service_card, work_card, quote_card, plan_card,
+   faq_list, faq_jsonld, cta_band, marquee_band, stat_band, page_blocks, flourish
+   with context %}
+
+{% block jsonld %}
+{{ faq_jsonld(faqs) }}
+{% if work %}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": brand_name,
+  "url": request.url_root.rstrip('/'),
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": request.url_root.rstrip('/') ~ "/insights?tag={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+} | tojson }}
+</script>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{# ── hero ─────────────────────────────────────────────────────────────────── #}
+<section class="hero">
+  <div class="mesh" aria-hidden="true"
+       data-para="0.06"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="gridlines" aria-hidden="true"></div>
+
+  <div class="wrap hero__grid">
+    <div>
+      <span class="eye r r--none">{{ page.kicker if page and page.kicker else S('brand.tagline') }}</span>
+
+      <h1 class="r r--none">
+        {# The rotating word is the service list, so it stays true as the offer
+           changes without anyone editing a template. #}
+        <span class="r-on" data-split>{{ page.heading if page and page.heading else 'Digital presence, built properly.' }}</span>
+        {% if rotating | length > 1 %}
+        <br>
+        <span class="rot" aria-hidden="true">
+          {% for word in rotating %}<span class="rot__i">{{ word }}</span>{% endfor %}
+        </span>
+        <span class="sr">{{ rotating | join(', ') }}</span>
+        {% endif %}
+      </h1>
+
+      <p class="lede r r--none" style="--d:150ms">
+        {{ page.intro if page and page.intro else S('brand.promise') }}
+      </p>
+
+      <div class="btns r r--none" style="--d:240ms">
+        <a class="btn btn--lg" href="{{ url_for('public.contact') }}" data-magnet="5">
+          Start a project {{ ico('arrow') }}</a>
+        {% if calculator_on %}
+        <a class="btn btn--ghost btn--lg" href="{{ url_for('public.pricing_page') }}">
+          {{ ico('calc') }} Price it yourself</a>
+        {% else %}
+        <a class="btn btn--ghost btn--lg" href="{{ url_for('public.work') }}">See the work</a>
+        {% endif %}
+      </div>
+
+      {% if stats %}
+      <div class="hero__proof r r--none" style="--d:320ms">
+        {% for row in stats[:4] %}
+        <div>
+          <b>{{ row.prefix }}<span data-count="{{ row.value }}">{{ row.value | int }}</span>{{ row.suffix }}</b>
+          <span>{{ row.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {# The card stack is decoration that happens to say something true: this is
+       what the first week with us looks like. #}
+    <div class="stack r r--right" style="--d:200ms" aria-hidden="true">
+      <div class="stack__c">
+        <div class="mini">
+          <span class="mini__i">{{ ico('doc') }}</span>
+          <span><span class="mini__t">Written scope</span>
+            <span class="mini__s">Fixed price, and what is not included</span></span>
+        </div>
+        <div class="mini">
+          <span class="mini__i">{{ ico('calendar') }}</span>
+          <span><span class="mini__t">Dates you can hold us to</span>
+            <span class="mini__s">Milestones, not a vague launch month</span></span>
+        </div>
+      </div>
+      <div class="stack__c">
+        <div class="mini">
+          <span class="mini__i">{{ ico('whatsapp') }}</span>
+          <span><span class="mini__t">One thread, one owner</span>
+            <span class="mini__s">Same person start to finish</span></span>
+        </div>
+      </div>
+      <div class="stack__c">
+        <div class="mini">
+          <span class="mini__i">{{ ico('life') }}</span>
+          <span><span class="mini__t">Support with a clock on it</span>
+            <span class="mini__s">P1 answered in
+              {{ S('sla.p1_response_hours') | int }} hours</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{{ marquee_band('What we build with') }}
+
+{# ── services ─────────────────────────────────────────────────────────────── #}
+{% if services %}
+<section class="sec" id="services">
+  <div class="wrap">
+    {{ sec_head('What we do', 'Four things, done properly',
+                'A studio that says no to the rest. Each of these has a page with the
+                 scope, the timeline and what it costs.') }}
+    <div class="grid g3">
+      {% for row in services %}{{ service_card(row, numbered=true, index=loop.index0) }}{% endfor %}
+    </div>
+    <div class="btns mt">
+      <a class="btn btn--plain" href="{{ url_for('public.services') }}">
+        Everything we offer {{ ico('arrow') }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ── how it goes ──────────────────────────────────────────────────────────── #}
+<section class="sec sec--alt">
+  <div class="wrap g-split">
+    <div>
+      {{ sec_head('How it goes', 'No mystery, no drift') }}
+      {{ flourish() }}
+      <p class="lede">Most projects go wrong in the gap between what was said on a call and
+        what was written down. We close that gap first and the rest gets easier.</p>
+      <div class="btns mt">
+        <a class="btn btn--ghost" href="{{ url_for('public.about') }}">How we work {{ ico('arrow') }}</a>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="steps__i r r--none">
+        <div><h3>A real conversation</h3>
+          <p>Thirty minutes on what you are actually trying to fix. If it is not something
+            we should build, we will say so.</p></div>
+      </div>
+      <div class="steps__i r r--none">
+        <div><h3>Scope and a fixed price</h3>
+          <p>A written proposal with what is included, what is not, and the dates. You accept
+            it online and that becomes the contract.</p></div>
+      </div>
+      <div class="steps__i r r--none">
+        <div><h3>Build in the open</h3>
+          <p>Staging link from day one, milestone by milestone. You see it before it is
+            finished, not after.</p></div>
+      </div>
+      <div class="steps__i r r--none">
+        <div><h3>Launch, then stay</h3>
+          <p>Handover with the logins in your name. Support with a response time in
+            writing, for as long as you want it.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ── work ─────────────────────────────────────────────────────────────────── #}
+{% if work %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('Selected work', 'Proof, with numbers in it',
+                'Every case study below names what changed and by how much.') }}
+    <div class="work">
+      {% for row in work %}{{ work_card(row) }}{% endfor %}
+    </div>
+    <div class="btns mt">
+      <a class="btn btn--plain" href="{{ url_for('public.work') }}">All case studies {{ ico('arrow') }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ── pricing teaser ───────────────────────────────────────────────────────── #}
+{% if packages %}
+<section class="sec sec--alt">
+  <div class="wrap">
+    {{ sec_head('Pricing', 'The prices are on the site', 'Because you should not have to
+                book a call to find out whether you can afford us.', mid=true) }}
+    <div class="plans">
+      {% for pkg in packages %}{{ plan_card(pkg) }}{% endfor %}
+    </div>
+    <div class="btns btns--mid mt">
+      <a class="btn btn--ghost" href="{{ url_for('public.pricing_page') }}">
+        {% if calculator_on %}{{ ico('calc') }} Build your own estimate{% else %}All packages{% endif %}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ── testimonials ─────────────────────────────────────────────────────────── #}
+{% if testimonials %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('In their words', 'What it is like to work with us', mid=true) }}
+    <div class="grid g3">
+      {% for row in testimonials[:3] %}{{ quote_card(row) }}{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if stats %}
+<section class="sec sec--tight">
+  <div class="wrap">{{ stat_band(stats) }}</div>
+</section>
+{% endif %}
+
+{# ── insights ─────────────────────────────────────────────────────────────── #}
+{% if posts %}
+<section class="sec sec--alt">
+  <div class="wrap">
+    {{ sec_head('Insights', 'Things worth writing down',
+                'Written for the person paying for the work, not for search engines.') }}
+    <div class="grid g3">
+      {% for row in posts %}
+      <a class="card r" href="{{ url_for('public.post', slug=row.slug) }}">
+        <div class="meta">
+          {% if row.published_at %}<span>{{ ico('calendar') }} {{ row.published_at | date_fmt }}</span>{% endif %}
+        </div>
+        <h3 style="margin-top:12px">{{ row.title }}</h3>
+        <p>{{ row.excerpt | truncate(130) }}</p>
+        <span class="card__more">Read it {{ ico('arrow') }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ── faqs ─────────────────────────────────────────────────────────────────── #}
+{% if faqs %}
+<section class="sec">
+  <div class="wrap wrap--tight">
+    {{ sec_head('Questions', 'The ones we get asked first', mid=true) }}
+    {{ faq_list(faqs) }}
+  </div>
+</section>
+{% endif %}
+
+{# Anything the owner added to the Home page in the panel lands here, after the
+   fixed sections rather than in place of them. #}
+{{ page_blocks(blocks) }}
+
+{{ cta_band() }}
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.invoices_list') }}">Invoices</a> &rsaquo; New</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="note {{ 'note--info' if gst else 'note--warn' }}">
+  <b>{{ mode_label }} mode.</b>
+  {% if gst %}
+  GST is charged at {{ tax_rate }}% by default, HSN/SAC codes are printed, and the split
+  follows the client's state. Change the rate per line if a line is taxed differently.
+  {% else %}
+  No tax is added, and the document says "bill of supply" rather than "tax invoice", which is
+  what the law requires while you are not registered. The switch is in
+  <a href="{{ url_for('admin.settings_view', tab='tax') }}">Settings &rsaquo; Tax</a>.
+  {% endif %}
+</div>
+
+<form method="post" data-guard data-lines>
+  {{ csrf() }}
+
+  <div class="pan">
+    <div class="pan__h">{{ ico('briefcase') }} <h2>Who and what for</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--5">
+          <label for="client_id">Client <em>*</em></label>
+          <select class="in" id="client_id" name="client_id" required>
+            <option value="">Choose a client</option>
+            {% for row in clients %}
+            <option value="{{ row.id }}" {{ 'selected' if client and client.id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fi fi--4">
+          <label for="project_id">Project</label>
+          <select class="in" id="project_id" name="project_id">
+            <option value="">Not tied to a project</option>
+            {% for row in projects %}
+            <option value="{{ row.id }}" data-client="{{ row.client_id }}"
+                    {{ 'selected' if project and project.id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">Tying it to a project is what makes the per-project margin real.</span>
+        </div>
+        <div class="fi fi--3">
+          <label for="kind">Kind</label>
+          <select class="in" id="kind" name="kind">
+            <option value="invoice">Invoice</option>
+            <option value="proforma">Proforma - a request, not yet a tax document</option>
+            <option value="advance">Advance receipt</option>
+          </select>
+        </div>
+
+        <div class="fi fi--4">
+          <label for="issued_on">Issue date</label>
+          <input class="in" id="issued_on" name="issued_on" type="date" value="{{ today }}">
+        </div>
+        <div class="fi fi--4">
+          <label for="terms_days">Payment terms, days</label>
+          <input class="in" id="terms_days" name="terms_days" type="number"
+                 value="{{ S('invoice.terms_days') }}">
+          <span class="hint">The due date is worked out from this.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if quote %}
+  <div class="pan">
+    <div class="pan__h">
+      {{ ico('calc') }} <h2>From quote {{ quote.ref }}</h2>
+      <p>{{ quote.title }} &middot; {{ quote.total | money }}</p>
+    </div>
+    <div class="pan__b">
+      <input type="hidden" name="quote_id" value="{{ quote.id }}">
+      <label class="sw">
+        <input type="checkbox" name="from_quote" value="1" checked>
+        <span class="sw__t"></span>
+        <span class="sw__l">Copy the quote's lines
+          <span>Recurring lines are left out - those become renewal items instead of being
+            billed once.</span></span>
+      </label>
+
+      <div class="fi fi--4" style="margin-top:12px">
+        <label for="share_pct">Bill what share of it?</label>
+        <div class="wrapin">
+          <input class="in" id="share_pct" name="share_pct" type="number" step="1" value="100">
+          <span class="fix">%</span>
+        </div>
+        <span class="hint">40 raises the first milestone of a 40/40/20 split without retyping
+          a single line.</span>
+      </div>
+
+      <table class="tbl tbl--tight" style="margin-top:12px">
+        <tbody>
+          {% for line in quote_lines %}
+          <tr class="{{ 'is-muted' if line.is_recurring }}">
+            <td>{{ line.label }}
+              {% if line.is_recurring %}<span class="sub">recurring - not billed here</span>{% endif %}</td>
+            <td class="num">{{ line.amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="pan">
+    <div class="pan__h">
+      {{ ico('list') }} <h2>Lines</h2>
+      <p>Or pick an accepted quote below and have them copied over.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      <div class="tbl-wrap">
+        <table class="tbl tbl--lines">
+          <thead>
+            <tr>
+              <th>What</th>{% if gst %}<th>HSN/SAC</th>{% endif %}
+              <th class="num">Qty</th><th>Unit</th><th class="num">Rate</th>
+              <th class="num">Disc %</th>{% if gst %}<th class="num">GST %</th>{% endif %}
+              <th class="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for i in range(6) %}
+            <tr data-line>
+              <td>
+                <input class="in in--sm" name="line_label_{{ i }}"
+                       placeholder="{{ 'Website design and build' if i == 0 else '' }}">
+                <input class="in in--sm" name="line_description_{{ i }}" placeholder="Detail, optional">
+              </td>
+              {% if gst %}
+              <td><input class="in in--sm" name="line_hsn_{{ i }}" value="{{ default_sac }}" size="8"></td>
+              {% endif %}
+              <td><input class="in in--sm num" name="line_qty_{{ i }}" type="number" step="0.01" value="1"></td>
+              <td><input class="in in--sm" name="line_unit_{{ i }}" value="each" size="6"></td>
+              <td><input class="in in--sm num" name="line_price_{{ i }}" type="number" step="0.01"></td>
+              <td><input class="in in--sm num" name="line_discount_{{ i }}" type="number" step="0.01" value="0"></td>
+              {% if gst %}
+              <td><input class="in in--sm num" name="line_tax_{{ i }}" type="number" step="0.01"
+                         value="{{ tax_rate }}"></td>
+              {% endif %}
+              <td class="num" data-line-amount>&#8377;0</td>
+            </tr>
+            {% endfor %}
+            <tr class="row--total">
+              <th colspan="{{ 6 if not gst else 8 }}">Before tax</th>
+              <td class="num" data-lines-total>&#8377;0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% if quotes %}
+  <div class="pan">
+    <div class="pan__h">{{ ico('calc') }} <h2>Or start from a quote</h2></div>
+    <div class="pan__b">
+      <div class="fi fi--8">
+        <label for="quote_pick">Accepted and sent quotes</label>
+        <select class="in" id="quote_pick" name="quote_id">
+          <option value="">Not from a quote</option>
+          {% for row in quotes %}
+          <option value="{{ row.id }}">{{ row.ref }} &middot; {{ row.title }} &middot;
+            {{ row.total | money }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Tick this and the lines above are ignored.</span>
+      </div>
+      <label class="sw">
+        <input type="checkbox" name="from_quote" value="1">
+        <span class="sw__t"></span>
+        <span class="sw__l">Use the chosen quote's lines</span>
+      </label>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <div class="pan">
+    <div class="pan__b">
+      <div class="fi fi--12">
+        <label for="notes">Notes on the invoice</label>
+        <textarea class="in" id="notes" name="notes" rows="2"
+                  placeholder="What this covers, or the milestone it relates to.">{% if quote %}Against quote {{ quote.ref }}.{% endif %}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Raise it as a draft</button>
+    <a class="b b--ghost" href="{{ url_for('admin.invoices_list') }}">Cancel</a>
+    <span class="savebar__note">A draft has no number yet. Issuing it takes the next one in the
+      series, and that cannot be undone - which is exactly what a numbered document should
+      mean.</span>
+  </div>
+</form>
+
+{% endblock %}

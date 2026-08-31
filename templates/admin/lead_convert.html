@@ -1,0 +1,101 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.leads_list') }}">Leads</a> &rsaquo;
+  <a href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.ref }}</a> &rsaquo; Convert
+</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="note">
+  <b>This creates three things at once:</b> a client record, a project, and its payment
+  schedule. The launch checklist is added to the project too. The lead itself moves to Won
+  and stays as the record of where the work came from.
+</div>
+
+<form class="pan pan--8" method="post" action="{{ url_for('admin.lead_convert', lead_id=lead.id) }}">
+  {{ csrf() }}
+  <h2 class="pan__h">{{ ico('rocket') }} Convert {{ lead.name }}</h2>
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--12">
+        <label for="project_name">Project name</label>
+        <input class="in" id="project_name" name="project_name"
+               value="{{ lead.service_interest or '' }}"
+               placeholder="{{ (lead.company or lead.name) ~ ' website' }}">
+        <span class="hint">What you will call this on the delivery board.</span>
+      </div>
+
+      <div class="fi fi--6">
+        <label for="quote_id">Base it on a quote</label>
+        <select class="in" id="quote_id" name="quote_id">
+          <option value="">No quote - I will set the value myself</option>
+          {% for quote in quotes %}
+          <option value="{{ quote.id }}" {{ 'selected' if loop.first }}>
+            {{ quote.ref }} &middot; {{ quote.total | money }}{% if quote.package_name %} &middot; {{ quote.package_name }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <span class="hint">Picking a quote carries its total, internal cost and yearly
+        recurring amount onto the project, which is what the margin report reads.</span>
+      </div>
+
+      <div class="fi fi--6">
+        <label for="value">Project value</label>
+        <div class="wrapin">
+          <span class="fix">&#8377;</span>
+          <input class="in" id="value" name="value" type="number" step="1"
+                 value="{{ (quotes[0].total if quotes else lead.quote_value) | round | int }}">
+        </div>
+        <span class="hint">Left at zero with a quote selected, the quote total is used.</span>
+      </div>
+
+      <div class="fi fi--6">
+        <label for="billing_type">How it bills</label>
+        <select class="in" id="billing_type" name="billing_type">
+          <option value="milestone">Milestones ({{ S('billing.advance_pct') }}% advance, then stages)</option>
+          <option value="full_advance">Full amount up front</option>
+          <option value="retainer">Monthly retainer</option>
+          <option value="hourly">Hourly, invoiced monthly</option>
+        </select>
+      </div>
+
+      <div class="fi fi--6">
+        <label>Client record</label>
+        <p class="static-val">
+          {{ lead.company or lead.name }}
+          <span class="sub">
+            {% if lead.client_id %}Already exists - it will be reused, not duplicated.
+            {% else %}Will be created from this lead's contact details.{% endif %}
+          </span>
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="pan__f">
+    <button class="b" type="submit">{{ ico('check') }} Create client and project</button>
+    <a class="b b--ghost" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">Cancel</a>
+  </div>
+</form>
+
+<section class="pan pan--4">
+  <h2 class="pan__h">{{ ico('user') }} What carries over</h2>
+  <div class="pan__b">
+    <dl class="dl">
+      <dt>Contact</dt><dd>{{ lead.name }}</dd>
+      {% if lead.email %}<dt>Email</dt><dd>{{ lead.email }}</dd>{% endif %}
+      {% if lead.phone %}<dt>Phone</dt><dd>{{ lead.phone }}</dd>{% endif %}
+      {% if lead.whatsapp %}<dt>WhatsApp</dt><dd>+{{ lead.whatsapp }}</dd>{% endif %}
+      {% if lead.city %}<dt>City</dt><dd>{{ lead.city }}</dd>{% endif %}
+      <dt>Place of supply</dt><dd>State code {{ S('gst.state_code') or 'not set' }}</dd>
+    </dl>
+    <p class="hint">Fix the client's own state code afterwards if they are outside your state -
+    it decides CGST+SGST against IGST the day you switch to tax invoices.</p>
+  </div>
+</section>
+
+{% endblock %}

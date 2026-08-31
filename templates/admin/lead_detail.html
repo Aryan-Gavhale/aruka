@@ -1,0 +1,328 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, stage_badge, badge, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.leads_list') }}">Leads</a> &rsaquo; {{ lead.ref }}
+  {% if lead.is_spam %}&rsaquo; <span class="is-bad">marked spam</span>{% endif %}
+</p>
+{% endblock %}
+
+{% block actions %}
+{% if lead.whatsapp or lead.phone %}
+<a class="b b--sm b--wa" href="{{ url_for('admin.wa_compose', kind='lead', target_id=lead.id) }}">
+  {{ ico('whatsapp') }} WhatsApp
+</a>
+{% endif %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.quote_new', lead_id=lead.id) }}">{{ ico('calc') }} Price it</a>
+{% if lead.stage != 'won' or not lead.client_id %}
+<a class="b b--sm" href="{{ url_for('admin.lead_convert', lead_id=lead.id) }}">{{ ico('rocket') }} Convert</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Stage', STAGE_LABELS[lead.stage], probability ~ '% likely') }}
+  {{ kpi('Expected value', lead.quote_value | money if lead.quote_value else '-',
+         'Weighted ' ~ ((lead.quote_value or 0) * probability / 100) | cmoney) }}
+  {{ kpi('Score', lead.score ~ '/100', 'Contactability, budget, detail') }}
+  {{ kpi('Follow-up',
+         lead.next_followup_on | date_fmt('%d %b') if lead.next_followup_on else 'none',
+         lead.followup_note | shorten(40) if lead.followup_note else 'No note',
+         'bad' if lead.next_followup_on and (lead.next_followup_on | days_until) < 0 else '') }}
+</div>
+
+{% if client %}
+<div class="note note--good">
+  Converted to <a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a>
+  on {{ lead.converted_at | date_fmt }}.
+</div>
+{% endif %}
+
+<div class="grid">
+
+  <!-- ── left: stage, contact, edit ───────────────────────────────────── -->
+  <div class="pan pan--7">
+    <h2 class="pan__h">{{ ico('flag') }} Move the stage</h2>
+    <div class="pan__b">
+      <form class="stager" method="post" action="{{ url_for('admin.lead_stage', lead_id=lead.id) }}">
+        {{ csrf() }}
+        <div class="chips">
+          {% for code in STAGES %}
+          <button class="chip {{ 'is-on' if lead.stage == code }}" type="submit" name="stage" value="{{ code }}">
+            {{ STAGE_LABELS[code] }}
+          </button>
+          {% endfor %}
+        </div>
+        <div class="row" style="margin-top:10px; gap:8px">
+          <input class="in" name="note" placeholder="Why (optional, goes on the timeline)">
+          <select class="in" name="lost_reason" style="max-width:220px">
+            <option value="">Lost reason, if lost</option>
+            {% for reason in S('crm.lost_reasons') %}
+            <option value="{{ reason }}" {{ 'selected' if lead.lost_reason == reason }}>{{ reason }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+
+      <hr class="rule">
+
+      <form class="row" method="post" action="{{ url_for('admin.lead_snooze', lead_id=lead.id) }}">
+        {{ csrf() }}
+        <span class="lbl">Snooze the follow-up</span>
+        {% for days in (1, 3, 7, 14, 30) %}
+        <button class="b b--sm b--ghost" type="submit" name="days" value="{{ days }}">
+          {{ days }}d
+        </button>
+        {% endfor %}
+        <input class="in" name="note" placeholder="Note" style="max-width:240px">
+      </form>
+    </div>
+  </div>
+
+  <div class="pan pan--5">
+    <h2 class="pan__h">{{ ico('user') }} Reach them</h2>
+    <div class="pan__b">
+      <dl class="dl">
+        <dt>Name</dt><dd>{{ lead.name }}</dd>
+        {% if lead.company %}<dt>Company</dt><dd>{{ lead.company }}</dd>{% endif %}
+        {% if lead.email %}
+        <dt>Email</dt>
+        <dd><a href="mailto:{{ lead.email }}">{{ lead.email }}</a>
+          <button class="ib" type="button" data-copy="{{ lead.email }}" title="Copy">{{ ico('copy') }}</button>
+        </dd>
+        {% endif %}
+        {% if lead.phone %}
+        <dt>Phone</dt>
+        <dd><a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>
+          <button class="ib" type="button" data-copy="{{ lead.phone }}" title="Copy">{{ ico('copy') }}</button>
+        </dd>
+        {% endif %}
+        {% if lead.whatsapp %}<dt>WhatsApp</dt><dd>+{{ lead.whatsapp }}</dd>{% endif %}
+        {% if lead.city %}<dt>City</dt><dd>{{ lead.city }}</dd>{% endif %}
+        <dt>Source</dt>
+        <dd>
+          {{ lead.source_name or 'Not recorded' }}
+          {% if lead.source_note %}<span class="sub">{{ lead.source_note }}</span>{% endif %}
+          {% if lead.utm_source or lead.utm_campaign %}
+          <span class="sub">
+            {{ lead.utm_source }}{% if lead.utm_medium %} / {{ lead.utm_medium }}{% endif %}
+            {% if lead.utm_campaign %} &middot; {{ lead.utm_campaign }}{% endif %}
+          </span>
+          {% endif %}
+          {% if lead.landing_page %}<span class="sub">Landed on {{ lead.landing_page }}</span>{% endif %}
+        </dd>
+        <dt>Added</dt>
+        <dd>{{ lead.created_at | datetime_fmt }} <span class="sub">{{ lead.created_at | ago }}</span></dd>
+        {% if lead.last_contact_at %}
+        <dt>Last contact</dt><dd>{{ lead.last_contact_at | ago }}</dd>
+        {% endif %}
+      </dl>
+
+      {% if lead.message %}
+      <div class="quote-box">
+        <span class="lbl">What they wrote</span>
+        {% for para in lead.message | paragraphs %}<p>{{ para }}</p>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── timeline ─────────────────────────────────────────────────────── -->
+  <div class="pan pan--7">
+    <h2 class="pan__h">{{ ico('chat') }} Timeline</h2>
+    <div class="pan__b">
+      <form class="logger" method="post" action="{{ url_for('admin.lead_event', lead_id=lead.id) }}">
+        {{ csrf() }}
+        <div class="row" style="gap:8px">
+          <select class="in" name="kind" style="max-width:150px">
+            <option value="note">Note</option>
+            <option value="call">Call</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+          </select>
+          <input class="in" name="body" placeholder="What happened" required>
+          <button class="b b--sm" type="submit">Log it</button>
+        </div>
+        <span class="hint">A call, WhatsApp, email or meeting also moves the follow-up date
+        forward and lifts a new lead to contacted.</span>
+      </form>
+
+      <ol class="tl">
+        {% for event in events %}
+        <li class="tl__i tl__i--{{ event.kind }}">
+          <span class="tl__d"></span>
+          <div class="tl__c">
+            <span class="tl__k">{{ event.kind | replace('_', ' ') | title }}</span>
+            {% if event.body %}<p>{{ event.body }}</p>{% endif %}
+            <span class="tl__m">
+              {{ event.created_at | datetime_fmt }}
+              {% if event.user_email and event.user_email != 'system' %} &middot; {{ event.user_email }}{% endif %}
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+
+  <!-- ── right column: quotes, documents, messages ─────────────────────── -->
+  <div class="pan pan--5">
+    <h2 class="pan__h">{{ ico('calc') }} Quotes</h2>
+    <div class="pan__b">
+      {% if quotes %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for quote in quotes %}
+          <tr>
+            <td><a href="{{ url_for('admin.quote_detail', quote_id=quote.id) }}">{{ quote.ref }}</a>
+              <span class="sub">{{ quote.created_at | date_fmt }}</span></td>
+            <td class="num">{{ quote.total | money }}</td>
+            <td>{{ badge(quote.status | title, 'good' if quote.status == 'accepted' else '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No quote yet.
+        <a href="{{ url_for('admin.quote_new', lead_id=lead.id) }}">Price this one up</a>.</p>
+      {% endif %}
+    </div>
+
+    <h2 class="pan__h">{{ ico('doc') }} Documents</h2>
+    <div class="pan__b">
+      {% if documents %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for document in documents %}
+          <tr>
+            <td><a href="{{ url_for('admin.document_detail', document_id=document.id) }}">{{ document.ref }}</a>
+              <span class="sub">{{ document.title | shorten(38) }}</span></td>
+            <td>{{ badge(document.status | replace('_', ' ') | title,
+                         'good' if document.status == 'accepted' else '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">Nothing sent in writing yet.</p>
+      {% endif %}
+    </div>
+
+    <h2 class="pan__h">{{ ico('whatsapp') }} Messages</h2>
+    <div class="pan__b">
+      {% if messages %}
+      <ul class="msgs">
+        {% for message in messages %}
+        <li class="msg msg--{{ message.direction }}">
+          <p>{{ message.body | shorten(180) }}</p>
+          <span class="msg__m">
+            {{ message.created_at | ago }} &middot; {{ message.status | replace('_', ' ') }}
+            {% if message.template_name %} &middot; {{ message.template_name }}{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No messages logged.</p>
+      {% endif %}
+      {% if lead.whatsapp or lead.phone %}
+      <p style="margin:12px 0 0">
+        <a class="b b--sm b--wa" href="{{ url_for('admin.wa_compose', kind='lead', target_id=lead.id) }}">
+          {{ ico('whatsapp') }} Compose
+        </a>
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── edit ─────────────────────────────────────────────────────────── -->
+  <form class="pan pan--12" method="post" action="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">
+    {{ csrf() }}
+    <h2 class="pan__h">{{ ico('pen') }} Edit the record</h2>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--4"><label for="name">Name</label>
+          <input class="in" id="name" name="name" value="{{ lead.name }}" required></div>
+        <div class="fi fi--4"><label for="company">Company</label>
+          <input class="in" id="company" name="company" value="{{ lead.company or '' }}"></div>
+        <div class="fi fi--4"><label for="city">City</label>
+          <input class="in" id="city" name="city" value="{{ lead.city or '' }}"></div>
+
+        <div class="fi fi--4"><label for="email">Email</label>
+          <input class="in" id="email" name="email" type="email" value="{{ lead.email or '' }}"></div>
+        <div class="fi fi--4"><label for="phone">Phone</label>
+          <input class="in" id="phone" name="phone" type="tel" value="{{ lead.phone or '' }}"></div>
+        <div class="fi fi--4"><label for="whatsapp">WhatsApp</label>
+          <input class="in" id="whatsapp" name="whatsapp" type="tel" value="{{ lead.whatsapp or '' }}"></div>
+
+        <div class="fi fi--4"><label for="source_id">Source</label>
+          <select class="in" id="source_id" name="source_id">
+            <option value="">Not recorded</option>
+            {% for row in sources %}
+            <option value="{{ row.id }}" {{ 'selected' if lead.source_id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--4"><label for="source_note">Source detail</label>
+          <input class="in" id="source_note" name="source_note" value="{{ lead.source_note or '' }}"></div>
+        <div class="fi fi--4"><label for="tags">Tags</label>
+          <input class="in" id="tags" name="tags" value="{{ lead.tags or '' }}"></div>
+
+        <div class="fi fi--4"><label for="service_interest">Service</label>
+          <input class="in" id="service_interest" name="service_interest"
+                 value="{{ lead.service_interest or '' }}" list="service-list">
+          <datalist id="service-list">
+            {% for row in services %}<option value="{{ row.name }}">{% endfor %}
+          </datalist></div>
+        <div class="fi fi--4"><label for="budget_band">Budget band</label>
+          <select class="in" id="budget_band" name="budget_band">
+            <option value="">Not discussed</option>
+            {% for band in S('crm.budget_bands') %}
+            <option value="{{ band }}" {{ 'selected' if lead.budget_band == band }}>{{ band }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--4"><label for="quote_value">Expected value</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="quote_value" name="quote_value" type="number" step="1"
+                   value="{{ lead.quote_value or 0 }}"></div></div>
+
+        <div class="fi fi--4"><label for="stage_sel">Stage</label>
+          <select class="in" id="stage_sel" name="stage">
+            {% for code in STAGES %}
+            <option value="{{ code }}" {{ 'selected' if lead.stage == code }}>{{ STAGE_LABELS[code] }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--4"><label for="next_followup_on">Follow up on</label>
+          <input class="in" id="next_followup_on" name="next_followup_on" type="date"
+                 value="{{ lead.next_followup_on or '' }}"></div>
+        <div class="fi fi--4"><label for="stage_note">Stage note</label>
+          <input class="in" id="stage_note" name="stage_note"
+                 placeholder="Only used if the stage changed"></div>
+
+        <div class="fi fi--12"><label for="followup_note">Follow-up note</label>
+          <input class="in" id="followup_note" name="followup_note"
+                 value="{{ lead.followup_note or '' }}"></div>
+        <div class="fi fi--12"><label for="message">What they said</label>
+          <textarea class="in" id="message" name="message" rows="4">{{ lead.message or '' }}</textarea></div>
+      </div>
+    </div>
+    <div class="pan__f">
+      <button class="b" type="submit">{{ ico('check') }} Save</button>
+      <a class="b b--ghost" href="{{ url_for('admin.leads_list') }}">Back to leads</a>
+      <span class="spacer"></span>
+      <button class="b b--sm b--danger" type="submit" form="lead-delete"
+              data-confirm="Delete {{ lead.name }} and the whole timeline? A spam mark is usually better.">
+        {{ ico('trash') }} Delete
+      </button>
+    </div>
+  </form>
+</div>
+
+<form id="lead-delete" method="post" action="{{ url_for('admin.lead_delete', lead_id=lead.id) }}" hidden>
+  {{ csrf() }}
+</form>
+
+{% endblock %}

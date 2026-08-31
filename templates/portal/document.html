@@ -1,0 +1,32 @@
+{% extends "portal/base.html" %}
+{% from "_doc.html" import doc_head, doc_masthead, doc_body, doc_sign, doc_foot with context %}
+
+{# The signed-in copy of a proposal. Identical to the share-link copy by design - see
+   the note in _doc.html. The only difference is the acceptance form, which needs no
+   honeypot here because a session already proves a human got a code by email. #}
+
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('portal.dashboard') }}">Overview</a>
+  <span aria-hidden="true">/</span>
+  <a href="{{ url_for('portal.documents_list') }}">Documents</a>
+  <span aria-hidden="true">/</span><span>{{ document.ref }}</span>
+</nav>
+
+<div class="doc">
+  {% set accepted = document.status == 'accepted' %}
+  {% set declined = document.status == 'declined' %}
+
+  {{ doc_head(document, accepted, declined) }}
+  {{ doc_masthead(document, url_for('portal.document_pdf', document_id=document.id)) }}
+  {{ doc_body(document, body, quote, clauses) }}
+
+  {% if not accepted and not declined %}
+  {% call doc_sign(document, body, url_for('portal.document', document_id=document.id)) %}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% endcall %}
+  {% endif %}
+
+  {{ doc_foot() }}
+</div>
+{% endblock %}

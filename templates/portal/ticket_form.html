@@ -1,0 +1,91 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# Raising a request. The priority is the client's to choose, which sounds like an
+   invitation to make everything a P1 - in practice they under-report, so the help
+   text describes each level honestly and the change-request tick is separated out so
+   "please add a page" does not arrive as a bug. #}
+
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('portal.tickets_list') }}">Support</a>
+  <span aria-hidden="true">/</span><span>New request</span>
+</nav>
+
+<div class="phead">
+  <div>
+    <h1>Raise a request</h1>
+    <p class="lede">{{ intro or 'Tell us what is happening and we will pick it up inside
+      the response time for the priority you choose.' }}</p>
+  </div>
+</div>
+
+<form class="f pform" method="post" action="{{ url_for('portal.ticket_new') }}" data-once>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="fi">
+    <label for="f-subject">What is it about? <em>*</em></label>
+    <input class="in" id="f-subject" name="subject" required autofocus maxlength="200"
+           placeholder="Contact form on the pricing page is not sending">
+  </div>
+
+  <div class="f f2">
+    <div class="fi">
+      <label for="f-category">Kind</label>
+      <select class="in" id="f-category" name="category">
+        {% for code, label in categories.items() %}
+        <option value="{{ code }}" {{ 'selected' if code == 'bug' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fi">
+      <label for="f-priority">How urgent</label>
+      <select class="in" id="f-priority" name="priority" aria-describedby="prio-help">
+        {% for code, label in priorities.items() %}
+        <option value="{{ code }}" {{ 'selected' if code == 'p3' }}>
+          {{ label }} — reply in {{ policies[code].response_hours | round | int }}h</option>
+        {% endfor %}
+      </select>
+      <span class="fi__h" id="prio-help">P1 means nobody can use it. P2 means something
+        important is broken but there is a way round. Be honest and we will be fast.</span>
+    </div>
+  </div>
+
+  {% if projects %}
+  <div class="fi">
+    <label for="f-project">Which project</label>
+    <select class="in" id="f-project" name="project_id">
+      <option value="">Not about a specific project</option>
+      {% for row in projects %}
+      <option value="{{ row.id }}"
+              {{ 'selected' if request.args.get('project_id') == row.id | string }}>
+        {{ row.name }} ({{ row.ref }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="fi">
+    <label for="f-body">What is happening</label>
+    <textarea class="in" id="f-body" name="body" rows="7"
+              placeholder="What you did, what you expected, what happened instead. A link to the page and the time it happened saves us an hour."></textarea>
+    <span class="fi__h">If you have a screenshot, send it on and we will attach it to this
+      request — mention it here so we know to look.</span>
+  </div>
+
+  <label class="consent">
+    <input type="checkbox" name="is_change_request" value="1">
+    <span>This is a change or something new, not something broken. We will price it before
+      doing any work.</span>
+  </label>
+
+  <div class="btns">
+    <button class="btn btn--lg" type="submit" data-busy="Logging&hellip;">
+      {{ ico('arrow') }} Raise it</button>
+    <a class="btn btn--ghost" href="{{ url_for('portal.tickets_list') }}">Cancel</a>
+  </div>
+</form>
+
+<p class="small mt">Genuinely down right now? Raise it as P1 here so it is on the record,
+  then call {{ S('contact.phone') or 'the number in the footer' }} as well.</p>
+{% endblock %}

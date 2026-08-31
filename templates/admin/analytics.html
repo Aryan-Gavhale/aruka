@@ -1,0 +1,432 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, bar, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Analytics &middot; {{ period_label }}</p>
+{% endblock %}
+
+{% block actions %}
+<form class="filters" method="get">
+  <input type="hidden" name="view" value="{{ view }}">
+  <select class="in in--sm" name="fy" data-autofilter aria-label="Financial year">
+    {% for year in years | reverse %}
+    <option value="{{ year }}" {{ 'selected' if year == start_year }}>
+      FY {{ year }}-{{ (year + 1) % 100 }}
+    </option>
+    {% endfor %}
+  </select>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="tabs">
+  <a class="tab {{ 'is-on' if view == 'fy' }}"
+     href="{{ url_for('admin.analytics', view='fy', fy=start_year) }}">Financial year</a>
+  <a class="tab {{ 'is-on' if view == 'month' }}"
+     href="{{ url_for('admin.analytics', view='month', fy=start_year) }}">This month</a>
+  {% for q in [1, 2, 3, 4] %}
+  <a class="tab {{ 'is-on' if view == 'quarter' and quarter == q }}"
+     href="{{ url_for('admin.analytics', view='quarter', q=q, fy=start_year) }}">Q{{ q }}</a>
+  {% endfor %}
+  <span class="spacer"></span>
+  <a class="tab" href="{{ url_for('admin.conversion') }}">{{ ico('funnel') }} Lead conversion</a>
+</div>
+
+<!-- ── the headline ────────────────────────────────────────────────────────── -->
+<div class="kpis kpis--4">
+  {{ kpi('Collected', collected | cmoney, 'Cash actually received, ' ~ period_label,
+         'good' if collected else '') }}
+  {{ kpi('Spent', spent | cmoney, 'Expenses paid in the same period') }}
+  {{ kpi('Net', net | cmoney, margin_pct ~ '% of what came in',
+         'good' if net > 0 else 'bad') }}
+  {{ kpi('Still owed', receivables | cmoney,
+         (uncollected | cmoney) ~ ' of it invoiced this period',
+         'bad' if receivables else 'good') }}
+</div>
+
+{% if uncollected > collected and collected %}
+<div class="note note--warn">
+  <b>You have invoiced more than you have collected.</b> {{ uncollected | cmoney }} of this
+  period's invoicing is still outstanding. Revenue you cannot spend is not revenue yet -
+  the <a href="{{ url_for('admin.receivables') }}">receivables screen</a> has the reminders
+  ready to send.
+</div>
+{% endif %}
+
+<div class="grid">
+  <!-- ── the year in twelve bars ────────────────────────────────────────────── -->
+  <section class="pan pan--8">
+    <div class="pan__h">
+      {{ ico('chart') }} <h2>Money in and money out, month by month</h2>
+      <p>Financial year order, April first. The pale bar is what you spent.</p>
+    </div>
+    <div class="pan__b">
+      {# Drawn rather than plotted by a library: twelve slots, two bars each, and the
+         arithmetic done here so the markup that arrives is already the picture. #}
+      {% set pad_l, pad_r, pad_t, pad_b = 46, 6, 10, 24 %}
+      {% set plot_w, plot_h = 720 - pad_l - pad_r, 220 - pad_t - pad_b %}
+      {% set floor = pad_t + plot_h %}
+      {% set slot = plot_w / 12 %}
+      <svg class="chart" viewBox="0 0 720 220" role="img"
+           aria-label="Collected against spent for each month of {{ period_label }}">
+        {% for frac in [0, 0.25, 0.5, 0.75, 1] %}
+        {% set y = floor - plot_h * frac %}
+        <line class="{{ 'axis' if frac == 0 else 'gl' }}"
+              x1="{{ pad_l }}" y1="{{ y | round(1) }}"
+              x2="{{ 720 - pad_r }}" y2="{{ y | round(1) }}"></line>
+        <text x="{{ pad_l - 6 }}" y="{{ (y + 3) | round(1) }}" text-anchor="end">
+          {{ (peak * frac) | cmoney }}
+        </text>
+        {% endfor %}
+
+        {% if target and target <= peak %}
+        <line class="line" x1="{{ pad_l }}" y1="{{ (floor - plot_h * target / peak) | round(1) }}"
+              x2="{{ 720 - pad_r }}" y2="{{ (floor - plot_h * target / peak) | round(1) }}"
+              stroke-dasharray="5 4"></line>
+        {% endif %}
+
+        {% for m in months %}
+        {% set mid = pad_l + slot * loop.index0 + slot / 2 %}
+        {% set inh = plot_h * m.collected / peak %}
+        {% set outh = plot_h * m.spent / peak %}
+        <g class="{{ 'future' if m.is_future }}">
+          <rect class="in-bar" x="{{ (mid - 17) | round(1) }}" width="16"
+                y="{{ (floor - inh) | round(1) }}" height="{{ inh | round(1) }}" rx="2">
+            <title>{{ m.label }}: {{ m.collected | money }} collected</title>
+          </rect>
+          <rect class="out-bar" x="{{ (mid + 1) | round(1) }}" width="16"
+                y="{{ (floor - outh) | round(1) }}" height="{{ outh | round(1) }}" rx="2">
+            <title>{{ m.label }}: {{ m.spent | money }} spent</title>
+          </rect>
+          <text x="{{ mid | round(1) }}" y="{{ floor + 15 }}" text-anchor="middle">
+            {{ m.month }}
+          </text>
+        </g>
+        {% endfor %}
+      </svg>
+      <div class="legend">
+        <span class="legend__i legend__i--in">Collected</span>
+        <span class="legend__i legend__i--out">Spent</span>
+        {% if target %}
+        <span class="legend__i legend__i--goal">Target {{ target | cmoney }} a month</span>
+        {% endif %}
+      </div>
+
+      <table class="tbl tbl--tight tbl--months">
+        <thead>
+          <tr><th>Month</th><th class="num">Invoiced</th><th class="num">Collected</th>
+            <th class="num">Spent</th><th class="num">Net</th>
+            {% if target %}<th class="num">Against target</th>{% endif %}</tr>
+        </thead>
+        <tbody>
+          {% for m in months if not m.is_future %}
+          <tr>
+            <td>{{ m.label }}</td>
+            <td class="num">{{ m.invoiced | cmoney }}</td>
+            <td class="num strong">{{ m.collected | cmoney }}</td>
+            <td class="num">{{ m.spent | cmoney }}</td>
+            <td class="num {{ 'is-bad' if m.net < 0 }}">{{ m.net | cmoney }}</td>
+            {% if target %}
+            <td class="num">
+              {% set gap = m.collected - target %}
+              <span class="{{ 'is-good' if gap >= 0 else 'is-bad' }}">
+                {{ '+' if gap >= 0 }}{{ gap | cmoney }}
+              </span>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── project margins ─────────────────────────────────────────────────── -->
+    {% if is_owner() and projects %}
+    <div class="pan__h">
+      {{ ico('rocket') }} <h2>Which projects actually paid</h2>
+      <p>Collected money less the costs tagged to it. The effective hourly rate is the number
+        worth arguing with - a profitable project at
+        {{ cost_per_hour | money }} an hour of your time is still the wrong project.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Project</th><th class="num">Collected</th><th class="num">Cost</th>
+              <th class="num">Margin</th><th class="num">Hours</th><th class="num">Per hour</th></tr>
+          </thead>
+          <tbody>
+            {% for row in projects %}
+            <tr>
+              <td>
+                <a class="rowlink" href="{{ url_for('admin.project_pl', project_id=row.id) }}">
+                  {{ row.name | shorten(34) }}</a>
+                <span class="sub">{{ row.client_name }}</span>
+              </td>
+              <td class="num">{{ row.collected | cmoney }}</td>
+              <td class="num">{{ row.total_cost | cmoney }}</td>
+              <td class="num strong {{ 'is-bad' if row.margin < 0 }}">
+                {{ row.margin | cmoney }}
+                <span class="sub">{{ row.margin_pct }}%</span>
+              </td>
+              <td class="num">{{ row.hours or '—' }}</td>
+              <td class="num">
+                {% if row.hourly %}
+                <span class="{{ 'is-bad' if cost_per_hour and row.hourly < cost_per_hour }}">
+                  {{ row.hourly | cmoney }}</span>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="padding:10px 18px">
+        A blank hours column means nobody logged any. The margin is still right; the rate is
+        simply unknowable without them.
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- ── revenue splits ──────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('coins') }} <h2>Where the money came from</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <h3 class="sub-h">By service line</h3>
+          {% if by_service %}
+          {% set peak_service = by_service | map(attribute='total') | max %}
+          <div class="bars">
+            {% for row in by_service %}
+            {{ bar(row.name, row.total, peak_service, row.total | cmoney) }}
+            {% endfor %}
+          </div>
+          <p class="hint">Unattributed money came in against an invoice with no project, or a
+            project with no service line set.</p>
+          {% else %}
+          <p class="muted">Nothing collected in this period.</p>
+          {% endif %}
+        </div>
+
+        <div class="fi fi--6">
+          <h3 class="sub-h">By client</h3>
+          {% if by_client %}
+          {% set peak_client = by_client | map(attribute='total') | max %}
+          <div class="bars">
+            {% for row in by_client %}
+            {{ bar(row.name, row.total, peak_client,
+                   (row.total | cmoney) ~ ' · ' ~ row.share ~ '%',
+                   'warn' if row.share > 40 else '') }}
+            {% endfor %}
+          </div>
+          {% set top = by_client[0] %}
+          {% if top.share > 40 %}
+          <p class="note note--warn">
+            {{ top.name }} is {{ top.share }}% of everything you collected. One client leaving
+            should not be able to end the business - this is the number to watch when deciding
+            which work to chase next.
+          </p>
+          {% endif %}
+          {% else %}
+          <p class="muted">Nothing collected in this period.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── spend ───────────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('wallet') }} <h2>Where it went</h2></div>
+    <div class="pan__b">
+      {% if by_category %}
+      {% set peak_cat = by_category | map(attribute='total') | max %}
+      <div class="bars">
+        {% for row in by_category %}
+        {{ bar(row.name, row.total, peak_cat,
+               (row.total | cmoney) ~ ' · ' ~ row.n ~ ' item' ~ ('' if row.n == 1 else 's')) }}
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">No expenses recorded in this period. Either it was a cheap quarter or
+        the receipts are still in a drawer.</p>
+      {% endif %}
+
+      {% if subs_monthly %}
+      <p class="hint">Your own subscriptions run at {{ subs_monthly | cmoney }} a month,
+        {{ (subs_monthly * 12) | cmoney }} a year.
+        <a href="{{ url_for('admin.subscriptions_list') }}">Review them</a> - this is the
+        expense that grows without anyone deciding to grow it.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── the side rail ────────────────────────────────────────────────────── -->
+  <section class="pan pan--4">
+    <div class="pan__h">{{ ico('refresh') }} <h2>Recurring revenue</h2></div>
+    <div class="pan__b">
+      <div class="kpis kpis--2 kpis--flat">
+        {{ kpi('MRR', mrr | cmoney, 'Every live item, per month') }}
+        {{ kpi('ARR', arr | cmoney, 'The same figure annualised') }}
+      </div>
+      <p class="hint">Hosting, care plans and retainers. This is the money that arrives whether
+        or not you sell anything next month, which makes it worth more per rupee than project
+        work.</p>
+      <dl class="dl dl--tight">
+        <dt>Renewal rate</dt>
+        <dd>{{ renewal_rate.rate }}%
+          <span class="sub">{{ renewal_rate.renewed }} renewed, {{ renewal_rate.lapsed }} lapsed</span></dd>
+        {% if renewal_rate.overdue %}
+        <dt>Overdue</dt>
+        <dd class="is-bad">{{ renewal_rate.overdue }} past their date
+          <span class="sub"><a href="{{ url_for('admin.renewals') }}">deal with them</a></span></dd>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- ── pipeline ────────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('funnel') }} <h2>Pipeline</h2></div>
+    <div class="pan__b">
+      <div class="kpis kpis--2 kpis--flat">
+        {{ kpi('Open value', pipeline.raw | cmoney, 'Everything not yet won or lost') }}
+        {{ kpi('Weighted', pipeline.weighted | cmoney, 'By stage probability', 'good') }}
+      </div>
+      {% if pipeline.detail %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in pipeline.detail %}
+          <tr>
+            <td>{{ row.label }}<span class="sub">{{ row.n }} lead{{ '' if row.n == 1 else 's' }}
+              at {{ row.probability }}%</span></td>
+            <td class="num">{{ row.weighted | cmoney }}
+              <span class="sub">of {{ row.value | cmoney }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">The weighted figure is the honest one to plan against. Raw pipeline value
+        assumes you win everything, which has never once happened.</p>
+      {% else %}
+      <p class="muted">Nothing open.</p>
+      {% endif %}
+    </div>
+
+    <!-- ── leads ───────────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('chat') }} <h2>Leads this period</h2></div>
+    <div class="pan__b">
+      <dl class="dl dl--tight">
+        <dt>Arrived</dt><dd>{{ lead_stats.leads }}</dd>
+        <dt>Won</dt><dd>{{ lead_stats.won }} &middot; {{ lead_stats.won_value | cmoney }}</dd>
+        <dt>Win rate</dt>
+        <dd>{{ lead_stats.win_rate }}%
+          <span class="sub">of the ones that closed either way</span></dd>
+        <dt>Average deal</dt><dd>{{ lead_stats.avg_deal | cmoney }}</dd>
+        <dt>Days to close</dt>
+        <dd>{{ lead_stats.avg_days_to_close }}
+          <span class="sub">first contact to won</span></dd>
+      </dl>
+    </div>
+
+    {% if sources %}
+    <div class="pan__h">{{ ico('tag') }} <h2>Which sources pay</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <thead>
+          <tr><th>Source</th><th class="num">Leads</th><th class="num">Won</th>
+            <th class="num">Value</th></tr>
+        </thead>
+        <tbody>
+          {% for row in sources %}
+          <tr>
+            <td>{{ row.source }}
+              <span class="sub">{{ row.conversion }}% convert</span></td>
+            <td class="num">{{ row.leads }}</td>
+            <td class="num">{{ row.won }}</td>
+            <td class="num">{{ row.won_value | cmoney }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint" style="padding:10px 18px">
+        Cost per acquisition and the full source breakdown are on the
+        <a href="{{ url_for('admin.conversion') }}">conversion screen</a>.
+      </p>
+    </div>
+    {% endif %}
+
+    {% if lost %}
+    <div class="pan__h">{{ ico('x') }} <h2>Why you lost</h2></div>
+    <div class="pan__b">
+      {% set peak_lost = lost | map(attribute='n') | max %}
+      <div class="bars">
+        {% for row in lost %}
+        {{ bar(row.reason, row.n, peak_lost,
+               row.n ~ (' · ' ~ (row.value | cmoney) if row.value else ''), 'bad') }}
+        {% endfor %}
+      </div>
+      <p class="hint">"Too expensive" appearing everywhere means your price is wrong for the
+        clients you are talking to - which is as likely to mean the wrong clients as the wrong
+        price.</p>
+    </div>
+    {% endif %}
+
+    <!-- ── support ─────────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('life') }} <h2>Support</h2></div>
+    <div class="pan__b">
+      <dl class="dl dl--tight">
+        <dt>Tickets</dt>
+        <dd>{{ ticket_stats.total }}
+          <span class="sub">{{ ticket_stats.live }} still open</span></dd>
+        <dt>SLA met</dt>
+        <dd class="{{ 'is-good' if ticket_stats.sla_pct >= 90 else 'is-bad' }}">
+          {{ ticket_stats.sla_pct }}%
+          <span class="sub">{{ ticket_stats.sla_met }} of {{ ticket_stats.resolved }} resolved</span></dd>
+        <dt>First reply</dt>
+        <dd>{{ ticket_stats.avg_response_hours }} hours on average</dd>
+        <dt>Time to resolve</dt>
+        <dd>{{ ticket_stats.avg_resolve_hours }} hours on average</dd>
+        {% if ticket_stats.reopened %}
+        <dt>Reopened</dt>
+        <dd class="is-bad">{{ ticket_stats.reopened }} times
+          <span class="sub">closed too early, or not actually fixed</span></dd>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- ── tax ─────────────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('shield') }} <h2>For your accountant</h2></div>
+    <div class="pan__b">
+      <p class="hint">Raising {{ tax.mode | lower }}s this year.</p>
+      <dl class="dl dl--tight">
+        <dt>Taxable value</dt><dd>{{ tax.taxable_value | money }}</dd>
+        {% if tax.output_tax %}
+        <dt>GST charged</dt><dd>{{ tax.output_tax | money }}</dd>
+        {% if tax.cgst %}<dt>CGST</dt><dd>{{ tax.cgst | money }}</dd>{% endif %}
+        {% if tax.sgst %}<dt>SGST</dt><dd>{{ tax.sgst | money }}</dd>{% endif %}
+        {% if tax.igst %}<dt>IGST</dt><dd>{{ tax.igst | money }}</dd>{% endif %}
+        <dt>GST on purchases</dt><dd>{{ tax.input_tax | money }}</dd>
+        <dt>Net payable</dt><dd><b>{{ tax.net_payable | money }}</b></dd>
+        {% endif %}
+        <dt>TDS deducted</dt>
+        <dd>{{ tax.tds_deducted | money }}
+          <span class="sub">claim it against your liability; check Form 26AS</span></dd>
+      </dl>
+      <p class="hint">A working summary, not a return. Your accountant will want the CSVs.</p>
+    </div>
+
+    <div class="pan__f">
+      <h3 class="sub-h">Take it away</h3>
+      <div class="chips">
+        {% for name, label in [('collected', 'Money collected'), ('invoiced', 'Invoices'),
+                               ('expenses', 'Expenses'), ('leads', 'Leads'),
+                               ('tickets', 'Tickets')] %}
+        <a class="chip" href="{{ url_for('admin.analytics_export', name=name, fy=start_year) }}">
+          {{ ico('download') }} {{ label }}</a>
+        {% endfor %}
+      </div>
+      <p class="hint">Plain CSV for the whole financial year, whatever period is on screen.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

@@ -1,0 +1,132 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# Milestones are the honest version of progress: a percentage can be argued with,
+   a list of named steps with dates cannot. Internal cost and margin never appear on
+   this page, and the task board is not exposed - a client reading "refactor the
+   rater" learns nothing useful and worries anyway. #}
+
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('portal.dashboard') }}">Overview</a>
+  <span aria-hidden="true">/</span><span>{{ project.name }}</span>
+</nav>
+
+<div class="phead">
+  <div>
+    <span class="eye">{{ project.ref }}</span>
+    <h1>{{ project.name }}</h1>
+    <p class="pitem__m">
+      <span class="chip">{{ PROJECT_STATUSES.get(project.status, project.status) }}</span>
+      {% if project.start_on %}started {{ project.start_on | date_fmt }}{% endif %}
+      {% if project.target_on %}&middot; target {{ project.target_on | date_fmt }}{% endif %}
+      {% if project.launched_on %}&middot; live since {{ project.launched_on | date_fmt }}{% endif %}
+    </p>
+  </div>
+  <a class="btn btn--sm btn--ghost" href="{{ url_for('portal.ticket_new') }}?project_id={{ project.id }}">
+    {{ ico('chat') }} Ask about this</a>
+</div>
+
+<div class="pprog">
+  <div class="prog" role="img" aria-label="{{ project.progress_pct }} percent complete">
+    <i style="width:{{ project.progress_pct }}%"></i></div>
+  <p class="small">{{ project.progress_pct }}% of the agreed scope is done.
+    {% if checklist %}{{ done_steps }} of {{ checklist | length }} launch steps cleared.{% endif %}</p>
+</div>
+
+{# ── milestones ───────────────────────────────────────────────────────────── #}
+{% if milestones %}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('board') }} Milestones</h2></div>
+  <div class="steps">
+    {% for row in milestones %}
+    <div class="steps__i {{ 'is-done' if row.done_on }}">
+      <div>
+        <h3>{{ row.label }}
+          {% if row.done_on %}<span class="chip chip--ok">Done {{ row.done_on | date_fmt }}</span>
+          {% elif row.due_on %}<span class="chip">Due {{ row.due_on | date_fmt }}</span>{% endif %}
+        </h3>
+        {% if row.description %}<p>{{ row.description }}</p>{% endif %}
+        {% if row.amount %}
+        <p class="small">{{ row.amount | money }}
+          {% if row.invoice_pct %}({{ row.invoice_pct | round | int }}% of the project){% endif %}
+          {% if row.invoice_id %}&middot; invoiced{% endif %}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ── launch checklist ─────────────────────────────────────────────────────── #}
+{% if checklist %}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('rocket') }} Before we go live</h2></div>
+  <ul class="ticks ticks--split">
+    {% for row in checklist %}
+    <li class="{{ 'is-open' if not row.is_done }}">
+      {{ row.label }}
+      {% if row.note %}<span class="small">{{ row.note }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="small">Anything still open here is on our list, not yours, unless we have
+    asked you for it directly.</p>
+</section>
+{% endif %}
+
+{# ── money on this project ────────────────────────────────────────────────── #}
+{% if invoices %}
+<section class="psec">
+  <div class="psec__h">
+    <h2>{{ ico('wallet') }} Invoices for this project</h2>
+    <a href="{{ url_for('portal.invoices') }}">All invoices {{ ico('arrow') }}</a>
+  </div>
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">Reference</th><th scope="col">Issued</th>
+          <th scope="col" class="num">Total</th><th scope="col" class="num">Balance</th>
+          <th scope="col">Status</th><th scope="col"></th></tr>
+      </thead>
+      <tbody>
+        {% for row in invoices %}
+        <tr>
+          <th scope="row">{{ row.ref }}</th>
+          <td>{{ row.issued_on | date_fmt }}</td>
+          <td class="num">{{ row.total | money }}</td>
+          <td class="num">{{ row.balance | money if row.balance else '—' }}</td>
+          <td><span class="chip chip--{{ row.status }}">
+            {{ INVOICE_STATUS_LABELS.get(row.status, row.status) }}</span></td>
+          <td class="num"><a href="{{ url_for('portal.invoice_pdf', invoice_id=row.id) }}"
+                             target="_blank" rel="noopener">PDF</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ── support raised against it ────────────────────────────────────────────── #}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('life') }} Requests on this project</h2></div>
+  {% if tickets_rows %}
+  <ul class="plist">
+    {% for row in tickets_rows %}
+    <li>
+      <a href="{{ url_for('portal.ticket', ticket_id=row.id) }}">
+        <span class="plist__t">{{ row.subject }}</span>
+        <span class="plist__m">{{ row.ref }} &middot; {{ row.created_at | date_fmt }}</span>
+      </a>
+      <span class="chip">{{ TICKET_STATUS_LABELS.get(row.status, row.status) }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Nothing raised against this one.
+    <a href="{{ url_for('portal.ticket_new') }}?project_id={{ project.id }}">Raise a request</a>.</p>
+  {% endif %}
+</section>
+{% endblock %}

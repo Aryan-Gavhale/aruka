@@ -1,0 +1,66 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block content %}
+
+<div class="grid">
+  <section class="pan pan--7">
+    <h2 class="pan__h">{{ ico('whatsapp') }} Ready to go</h2>
+    <div class="pan__b">
+      <p>WhatsApp opens with this text already typed. Press send there, then tell this page
+      what happened - the log cannot see past the point the tab opens, and a log that guesses
+      is worse than one that asks.</p>
+
+      <a class="b b--wa b--lg" href="{{ link }}" target="_blank" rel="noopener"
+         data-wa-open>{{ ico('whatsapp') }} Open WhatsApp for +{{ row.to_number | wa }}</a>
+
+      <div class="preview">
+        <div class="preview__b">{{ row.body }}</div>
+      </div>
+
+      <p class="row" style="gap:8px; margin-top:12px">
+        <button class="b b--sm b--ghost" type="button" data-copy="{{ row.body }}">
+          {{ ico('copy') }} Copy the text
+        </button>
+        <button class="b b--sm b--ghost" type="button" data-copy="{{ row.to_number | wa }}">
+          {{ ico('copy') }} Copy the number
+        </button>
+      </p>
+    </div>
+
+    <div class="pan__f">
+      <form class="row" method="post" action="{{ url_for('admin.wa_confirm', message_id=row.id) }}"
+            style="gap:8px; width:100%">
+        {{ csrf() }}
+        <input type="hidden" name="next" value="{{ back }}">
+        <button class="b" type="submit" name="outcome" value="sent">
+          {{ ico('check') }} Sent it
+        </button>
+        <button class="b b--ghost" type="submit" name="outcome" value="failed">
+          {{ ico('x') }} Did not send
+        </button>
+        <span class="spacer"></span>
+        <a class="b b--sm b--ghost" href="{{ back }}">Decide later</a>
+      </form>
+    </div>
+  </section>
+
+  <section class="pan pan--5">
+    <h2 class="pan__h">{{ ico('help') }} Why the extra click</h2>
+    <div class="pan__b">
+      <p>Click-to-chat is a link, not an API. It costs nothing, needs no approval and cannot
+      get your number banned - but it also gives no delivery receipt.</p>
+      <p>Marking the outcome keeps the message log honest, which matters when you are looking
+      at a lead six weeks later trying to work out whether you ever actually replied.</p>
+      <hr class="rule">
+      <p class="lbl">Want real delivery statuses?</p>
+      <p>Switch the provider to the Meta WhatsApp Cloud API in
+        <a href="{{ url_for('admin.settings_view', tab='whatsapp') }}">Settings &rsaquo;
+        WhatsApp</a>. That path needs a verified Business number and approved templates, and
+        every screen here keeps working the same way once it is on.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

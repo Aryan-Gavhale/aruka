@@ -1,0 +1,143 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.projects_list') }}">Projects</a> &rsaquo; New</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+
+  <div class="pan pan--narrow">
+    <div class="pan__h">{{ ico('rocket') }} <h2>What is being built</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="client_id">Client <em>*</em></label>
+          <select class="in" id="client_id" name="client_id" required>
+            <option value="">Choose a client</option>
+            {% for row in clients %}
+            <option value="{{ row.id }}" {{ 'selected' if client_id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">A project cannot be moved between clients later, so pick carefully.</span>
+        </div>
+        <div class="fi fi--6">
+          <label for="name">Name <em>*</em></label>
+          <input class="in" id="name" name="name" required
+                 placeholder="Website build, or SEO retainer 2026">
+        </div>
+
+        <div class="fi fi--4">
+          <label for="package_id">Package</label>
+          <select class="in" id="package_id" name="package_id">
+            <option value="">Not from a package</option>
+            {% for row in packages %}
+            <option value="{{ row.id }}">{{ row.name }} &middot; {{ row.price | money }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fi fi--4">
+          <label for="service_id">Service line</label>
+          <select class="in" id="service_id" name="service_id">
+            <option value="">Not set</option>
+            {% for row in services %}
+            <option value="{{ row.id }}">{{ row.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">Drives the revenue-by-service figure in analytics.</span>
+        </div>
+        <div class="fi fi--4">
+          <label for="status">Status</label>
+          <select class="in" id="status" name="status">
+            {% for code, label in statuses.items() %}
+            <option value="{{ code }}" {{ 'selected' if code == 'planned' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="pan__b">
+      <h3 class="sub-h">Money and dates</h3>
+      <div class="grid">
+        <div class="fi fi--4">
+          <label for="value">Project value</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="value" name="value" type="number" step="1"></div>
+          <span class="hint">Excluding anything recurring.</span>
+        </div>
+        {% if is_owner() %}
+        <div class="fi fi--4">
+          <label for="internal_cost">Your expected cost</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="internal_cost" name="internal_cost" type="number" step="1"></div>
+          <span class="hint">Contractors, licences, your own time. This is what makes the
+            margin figure worth reading.</span>
+        </div>
+        {% endif %}
+        <div class="fi fi--4">
+          <label for="recurring_yearly">Recurring per year</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="recurring_yearly" name="recurring_yearly" type="number" step="1"></div>
+          <span class="hint">Hosting and care. Add the actual renewal item afterwards so it
+            appears in the renewals calendar.</span>
+        </div>
+
+        <div class="fi fi--4">
+          <label for="billing_type">How it is billed</label>
+          <select class="in" id="billing_type" name="billing_type">
+            <option value="milestone">By milestone</option>
+            <option value="fixed">One invoice on completion</option>
+            <option value="retainer">Monthly retainer</option>
+            <option value="hourly">By the hour</option>
+          </select>
+        </div>
+        <div class="fi fi--4">
+          <label for="start_on">Starts</label>
+          <input class="in" id="start_on" name="start_on" type="date" value="{{ today }}">
+        </div>
+        <div class="fi fi--4">
+          <label for="target_on">Target launch</label>
+          <input class="in" id="target_on" name="target_on" type="date">
+          <span class="hint">What the client was told. The dashboard counts down to it.</span>
+        </div>
+
+        <div class="fi fi--12">
+          <label for="notes">Notes</label>
+          <textarea class="in" id="notes" name="notes" rows="3"
+                    placeholder="Scope in a sentence, who the decision-maker is, anything agreed on a call."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="pan__f">
+      <h3 class="sub-h">Start it off with</h3>
+      <label class="sw">
+        <input type="checkbox" name="seed_milestones" value="1" checked>
+        <span class="sw__t"></span>
+        <span class="sw__l">The payment schedule
+          <span>{% for step in schedule %}{{ step.label }} {{ step.pct }}%{{ ' &middot; ' | safe if not loop.last }}{% endfor %},
+            from your document settings, as editable milestones.</span></span>
+      </label>
+      <label class="sw">
+        <input type="checkbox" name="seed_checklist" value="1" checked>
+        <span class="sw__t"></span>
+        <span class="sw__l">The launch checklist
+          <span>Analytics, sitemap, SSL, backups, the handover recording - the list a hand-over
+            is not finished without. Copied onto this project, so editing it here changes
+            nothing for the next one.</span></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Create the project</button>
+    <a class="b b--ghost" href="{{ url_for('admin.projects_list') }}">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

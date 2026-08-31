@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ title }} &middot; {{ brand_name }} admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237C5CFF'/><text x='16' y='23' font-family='sans-serif' font-weight='700' font-size='18' fill='white' text-anchor='middle'>A</text></svg>">
+</head>
+<body>
+{% from "admin/_icons.html" import ico %}
+
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="side__top">
+      <a class="side__brand" href="{{ url_for('admin.dashboard') }}">
+        <span class="side__mark">{{ brand_name[:1] | upper }}</span>
+        <span class="side__brand-t">
+          <span class="side__name">{{ brand_name }}</span>
+          <span class="side__sub">Studio desk</span>
+        </span>
+      </a>
+      <a class="side__view" href="/" target="_blank" rel="noopener">{{ ico('external') }} View the website</a>
+    </div>
+
+    <nav class="side__nav" aria-label="Admin sections">
+      {% for group_label, items in nav_groups %}
+        {% set allowed = [] %}
+        {% for endpoint, label, icon_name, area in items %}
+          {% if area is none or can(area) %}{% set _ = allowed.append((endpoint, label, icon_name)) %}{% endif %}
+        {% endfor %}
+        {% if allowed %}
+        <div class="side__group">
+          <div class="side__label">{{ group_label }}</div>
+          {% for endpoint, label, icon_name in allowed %}
+          <a class="side__a {{ 'is-on' if request.endpoint == endpoint or (nav_active is defined and nav_active == endpoint) }}"
+             href="{{ url_for(endpoint) }}">
+            {{ ico(icon_name) }} {{ label }}
+            {% if endpoint == 'admin.leads_board' and counts.followups %}<b class="{{ 'is-bad' if counts.followups_late }}">{{ counts.followups }}</b>
+            {% elif endpoint == 'admin.tickets_list' and counts.tickets %}<b class="{{ 'is-bad' if counts.tickets_sla }}">{{ counts.tickets }}</b>
+            {% elif endpoint == 'admin.invoices_list' and counts.overdue %}<b class="is-bad">{{ counts.overdue }}</b>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <div class="side__foot">
+      <div class="side__me">
+        <span class="side__av">{{ admin_user.name | initials }}</span>
+        <span class="side__me-t">
+          <b>{{ admin_user.name }}</b>
+          <span>{{ ROLE_LABELS.get(admin_user.role, admin_user.role) }}</span>
+        </span>
+        <form method="post" action="{{ url_for('admin.logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="side__out" type="submit" title="Sign out" aria-label="Sign out">{{ ico('out') }}</button>
+        </form>
+      </div>
+      <p style="margin:9px 0 0; font-size:12px">
+        <a href="{{ url_for('admin.account') }}">Your account</a>
+      </p>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="main">
+    <header class="top">
+      <button class="burger2" id="burger2" type="button" aria-label="Menu"><span></span><span></span><span></span></button>
+      <div>
+        <h1 class="top__t">{{ title }}</h1>
+        {% block crumb %}{% endblock %}
+      </div>
+      <div class="top__actions">
+        {% block actions %}{% endblock %}
+        <form class="search" method="get" action="{{ url_for('admin.search') }}">
+          {{ ico('search') }}
+          <input class="in" type="search" name="q" placeholder="Search everything"
+                 value="{{ request.args.get('q', '') if request.endpoint == 'admin.search' }}"
+                 aria-label="Search leads, clients, invoices, tickets and documents">
+        </form>
+        <a class="b b--sm b--ghost" href="{{ url_for('admin.notifications') }}"
+           title="{{ counts.notifications }} unread">
+          {{ ico('bell') }}{% if counts.notifications %} {{ counts.notifications }}{% endif %}
+        </a>
+      </div>
+    </header>
+
+    <div class="wrap">
+      {% if not onboarded and request.endpoint != 'admin.onboarding' %}
+      <div class="note note--warn" style="margin-bottom:16px">
+        <b>This is still the demo rate card.</b> Run the
+        <a href="{{ url_for('admin.onboarding') }}">setup wizard</a> to put your own brand,
+        contact details, payment details and jurisdiction in before anything goes to a client.
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<div class="flashes" id="flashes">
+  {% for category, message in get_flashed_messages(with_categories=true) %}
+  <div class="flash {{ 'flash--error' if category == 'error' }}">
+    <span>{{ message }}</span>
+    <button class="flash__x" type="button" aria-label="Dismiss">&times;</button>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="modal" id="picker" hidden>
+  <div class="modal__box">
+    <div class="modal__h">
+      <h2>Choose an image</h2>
+      <button class="b b--ghost b--sm modal__x" type="button" data-picker-close>Close</button>
+    </div>
+    <div class="modal__b" id="picker-body"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin.js') }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

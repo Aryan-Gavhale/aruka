@@ -1,0 +1,115 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Renewals &middot; next {{ notice }} days</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.recurring_list') }}">
+  {{ ico('refresh') }} All recurring items</a>
+<a class="b b--sm" href="{{ url_for('admin.recurring_new') }}">{{ ico('plus') }} New recurring item</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Due inside ' ~ notice ~ ' days', due | length,
+         'Hosting, domains, care plans', 'warn' if due else '') }}
+  {{ kpi('Recurring per month', mrr | cmoney, 'Everything annualised and divided', 'good') }}
+  {{ kpi('Coming later', later | length, 'Beyond the notice window') }}
+</div>
+
+<div class="note note--info">
+  A renewal invoice is <b>not</b> raised automatically unless you turned that on for the item.
+  A client who cancelled last month being billed again is worse than a renewal going out a day
+  late, so the default is that you press the button.
+</div>
+
+<div class="pan">
+  <div class="pan__h">
+    {{ ico('calendar') }} <h2>Due now</h2>
+    <p>Raising the invoice also rolls the next due date forward by one period, so nothing gets
+      billed twice.</p>
+  </div>
+  <div class="pan__b pan__b--flush">
+    {% if due %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr><th>Item</th><th>Client</th><th>Due</th><th>Every</th>
+            <th class="num">Amount</th>{% if is_owner() %}<th class="num">Margin</th>{% endif %}
+            <th class="act">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for row in due %}
+          {% set days = row.next_due_on | days_until %}
+          <tr class="{{ 'is-flagged' if days is not none and days < 0 }}">
+            <td>
+              <b>{{ row.label }}</b>
+              <span class="sub">{{ RECURRING_KINDS.get(row.kind, row.kind) }}</span>
+            </td>
+            <td><a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a></td>
+            <td>
+              {{ row.next_due_on | date_fmt('%d %b %Y') }}
+              {% if days is not none %}
+              <span class="sub {{ 'is-bad' if days < 0 }}">
+                {{ 'overdue by ' ~ (days | abs) ~ ' days' if days < 0 else 'in ' ~ days ~ ' days' }}
+              </span>
+              {% endif %}
+            </td>
+            <td>{{ row.period | replace('_', ' ') }}</td>
+            <td class="num strong">{{ row.amount | money }}</td>
+            {% if is_owner() %}
+            <td class="num">
+              {% if row.internal_cost %}{{ (row.amount - row.internal_cost) | cmoney }}
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+            <td class="act">
+              {{ wa_button(row.client_whatsapp, 'client', row.client_id) }}
+              <form method="post" action="{{ url_for('admin.renewal_invoice', recurring_id=row.id) }}">
+                {{ csrf() }}
+                <button class="b b--sm" type="submit">{{ ico('wallet') }} Invoice it</button>
+              </form>
+              <a class="ib" title="Edit" href="{{ url_for('admin.recurring_edit', row_id=row.id) }}">{{ ico('pen') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('calendar') }}
+      <h3>Nothing renews in the next {{ notice }} days</h3>
+      <p>Add hosting, domains and care plans as recurring items and they appear here before
+        they lapse rather than after.</p>
+      <a class="b b--ghost" href="{{ url_for('admin.recurring_new') }}">Add one</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if later %}
+<div class="pan">
+  <div class="pan__h">{{ ico('clock') }} <h2>Later this year</h2></div>
+  <div class="pan__b pan__b--flush">
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for row in later %}
+        <tr>
+          <td>{{ row.label }}<span class="sub">{{ row.client_name }}</span></td>
+          <td>{{ row.next_due_on | date_fmt('%d %b %Y') }}
+            <span class="sub">{{ row.next_due_on | days_until }} days</span></td>
+          <td class="num">{{ row.amount | money }} <span class="sub">{{ row.period }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

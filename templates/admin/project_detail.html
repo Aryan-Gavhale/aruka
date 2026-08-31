@@ -1,0 +1,489 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, invoice_badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.projects_list') }}">Projects</a> &rsaquo;
+  {{ project.name }} <span class="mono">{{ project.ref }}</span> &middot;
+  <a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a></p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.project_pl', project_id=project.id) }}">
+  {{ ico('chart') }} Profit</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.ticket_new', project_id=project.id) }}">
+  {{ ico('life') }} Log a ticket</a>
+<a class="b b--sm" href="{{ url_for('admin.invoice_new', client_id=client.id, project_id=project.id) }}">
+  {{ ico('wallet') }} Invoice</a>
+{% endblock %}
+
+{% block content %}
+
+{% set days = project.target_on | days_until %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Progress', project.progress_pct ~ '%',
+         (board.done | length) ~ ' of ' ~ (board.todo | length + board.doing | length
+           + board.review | length + board.done | length) ~ ' tasks done') }}
+  {{ kpi('Target', project.target_on | date_fmt('%d %b %Y') if project.target_on else 'not set',
+         ((days | abs) ~ ' days over') if days is not none and days < 0
+           else ((days ~ ' days left') if days is not none else ''),
+         'bad' if days is not none and days < 0 else '') }}
+  {{ kpi('Collected', pl.collected | cmoney,
+         (pl.outstanding | cmoney) ~ ' still to come' if pl.outstanding else 'all in',
+         'good' if pl.collected else '') }}
+  {% if is_owner() %}
+  {{ kpi('Margin', pl.margin | cmoney, pl.margin_pct ~ '% of what came in',
+         'good' if pl.margin > 0 else 'bad') }}
+  {% else %}
+  {{ kpi('Invoiced', pl.invoiced | cmoney, 'Excluding drafts') }}
+  {% endif %}
+</div>
+
+{% if project.health == 'red' %}
+<div class="note note--bad">
+  <b>Marked as in trouble.</b> Whatever the reason is, the client is better off hearing it from
+  you today than finding out on the launch date.
+</div>
+{% endif %}
+
+<div class="grid">
+
+  <!-- ── the board ────────────────────────────────────────────────────────── -->
+  <section class="pan pan--8">
+    <div class="pan__h">
+      {{ ico('board') }} <h2>Work</h2>
+      <p>Progress is worked out from the done column, so the percentage cannot drift away from
+        what has actually been finished.</p>
+    </div>
+    <div class="pan__b">
+      <div class="board board--tasks" data-board="tasks">
+        {% for code, label in columns.items() %}
+        <div class="col" data-stage="{{ code }}">
+          <div class="col__h">
+            <span class="col__t">{{ label }}</span>
+            <span class="col__n">{{ board[code] | length }}</span>
+          </div>
+          <div class="col__b" data-drop>
+            {% for task in board[code] %}
+            <article class="card" draggable="true" data-task="{{ task.id }}"
+                     data-move-url="{{ url_for('admin.task_move', task_id=task.id) }}">
+              <p class="card__t">{{ task.title }}</p>
+              <div class="card__f">
+                {% if task.priority == 'high' %}{{ badge('high', 'bad') }}{% endif %}
+                {% if task.due_on %}
+                <span class="card__d {{ 'is-late' if (task.due_on | days_until) < 0 }}">
+                  {{ task.due_on | date_fmt('%d %b') }}
+                </span>
+                {% endif %}
+                {% if task.estimate_hours %}<span class="card__h">{{ task.estimate_hours }}h</span>{% endif %}
+              </div>
+            </article>
+            {% endfor %}
+            <p class="col__empty" {{ 'hidden' if board[code] }}>Nothing here</p>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <details class="adder">
+        <summary>{{ ico('plus') }} Add a task</summary>
+        <form method="post" action="{{ url_for('admin.task_add', project_id=project.id) }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--6"><label for="t-title">What needs doing</label>
+              <input class="in in--sm" id="t-title" name="title" required></div>
+            <div class="fi fi--3"><label for="t-status">Column</label>
+              <select class="in in--sm" id="t-status" name="status">
+                {% for code, label in columns.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--3"><label for="t-priority">Priority</label>
+              <select class="in in--sm" id="t-priority" name="priority">
+                <option value="normal">Normal</option><option value="high">High</option>
+                <option value="low">Low</option>
+              </select></div>
+            <div class="fi fi--3"><label for="t-est">Estimate, hours</label>
+              <input class="in in--sm" id="t-est" name="estimate_hours" type="number" step="0.5"></div>
+            <div class="fi fi--3"><label for="t-due">Due</label>
+              <input class="in in--sm" id="t-due" name="due_on" type="date"></div>
+            <div class="fi fi--3"><label for="t-who">Who</label>
+              <select class="in in--sm" id="t-who" name="assignee_user_id">
+                <option value="">Unassigned</option>
+                {% for row in users %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--3"><label for="t-ms">Milestone</label>
+              <select class="in in--sm" id="t-ms" name="milestone_id">
+                <option value="">None</option>
+                {% for row in milestones %}<option value="{{ row.id }}">{{ row.label }}</option>{% endfor %}
+              </select></div>
+          </div>
+          <button class="b b--sm" type="submit">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- ── milestones ─────────────────────────────────────────────────────── -->
+    <div class="pan__h">
+      {{ ico('flag') }} <h2>Payment schedule</h2>
+      <span class="spacer"></span>
+      {% if not milestones %}
+      <form method="post" action="{{ url_for('admin.milestone_add', project_id=project.id) }}">
+        {{ csrf() }}
+        <input type="hidden" name="action" value="seed">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('plus') }} Use my default split</button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if milestones %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for ms in milestones %}
+          <tr class="{{ 'is-done' if ms.done_on }}">
+            <td>
+              <b>{{ ms.label }}</b>
+              {% if ms.description %}<span class="sub">{{ ms.description }}</span>{% endif %}
+              {% if ms.due_on %}<span class="sub">due {{ ms.due_on | date_fmt('%d %b %Y') }}</span>{% endif %}
+            </td>
+            <td class="num">
+              {{ ms.invoice_pct }}%
+              <span class="sub">{{ ms.amount | money if ms.amount else (project.value * ms.invoice_pct / 100) | money }}</span>
+            </td>
+            <td>
+              {% if ms.invoice_id %}
+                <a href="{{ url_for('admin.invoice_detail', invoice_id=ms.invoice_id) }}">invoiced</a>
+              {% elif ms.done_on %}{{ badge('done, not billed', 'warn') }}
+              {% else %}{{ badge('pending', 'mute') }}{% endif %}
+            </td>
+            <td class="act">
+              <form method="post" action="{{ url_for('admin.milestone_done', milestone_id=ms.id) }}">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="{{ 'Reopen' if ms.done_on else 'Mark done' }}">
+                  {{ ico('check') }}</button>
+              </form>
+              {% if not ms.invoice_id %}
+              <form method="post" action="{{ url_for('admin.milestone_invoice', milestone_id=ms.id) }}">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="Raise the invoice for this milestone">
+                  {{ ico('wallet') }}</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.milestone_delete', milestone_id=ms.id) }}"
+                    data-confirm="Remove this milestone?">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">
+        No schedule yet. Milestones are what let an invoice bill 40% of the same quote lines
+        without you retyping any of them.
+      </p>
+      {% endif %}
+
+      <details class="adder" style="padding:0 18px 16px">
+        <summary>{{ ico('plus') }} Add a milestone</summary>
+        <form method="post" action="{{ url_for('admin.milestone_add', project_id=project.id) }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--6"><label for="m-label">Trigger</label>
+              <input class="in in--sm" id="m-label" name="label" required
+                     placeholder="On staging approval"></div>
+            <div class="fi fi--3"><label for="m-pct">Percent</label>
+              <input class="in in--sm" id="m-pct" name="invoice_pct" type="number" step="1"></div>
+            <div class="fi fi--3"><label for="m-due">Due</label>
+              <input class="in in--sm" id="m-due" name="due_on" type="date"></div>
+          </div>
+          <button class="b b--sm" type="submit">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- ── invoices ───────────────────────────────────────────────────────── -->
+    {% if invoices %}
+    <div class="pan__h">{{ ico('wallet') }} <h2>Invoices</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in invoices %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.issued_on | date_fmt('%d %b %Y') }}</span></td>
+            <td>{{ invoice_badge(row.status) }}</td>
+            <td class="num">{{ row.total | money }}</td>
+            <td class="num {{ 'is-bad' if row.balance }}">
+              {% if row.balance %}{{ row.balance | money }} due{% else %}<span class="muted">settled</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ── the side rail ────────────────────────────────────────────────────── -->
+  <section class="pan pan--4">
+    <div class="pan__h">
+      {{ ico('check') }} <h2>Launch checklist</h2>
+      <span class="spacer"></span>
+      <span class="sub" data-progress-text>
+        {{ ((done_steps / checklist | length * 100) | round | int) if checklist else 0 }}% complete
+      </span>
+    </div>
+    <div class="pan__b">
+      {% if checklist %}
+      <span class="prog">
+        <span class="prog__f" data-progress
+              style="width: {{ (done_steps / checklist | length * 100) | round | int }}%"></span>
+      </span>
+      <ul class="checks">
+        {% for step in checklist %}
+        <li class="check {{ 'is-done' if step.is_done }}">
+          <label>
+            <input type="checkbox" {{ 'checked' if step.is_done }}
+                   data-check-url="{{ url_for('admin.checklist_toggle', step_id=step.id) }}">
+            <span class="check__l">{{ step.label }}
+              {%- if step.note %}<em class="check__m">{{ step.note }}</em>{% endif %}</span>
+          </label>
+          <form method="post" action="{{ url_for('admin.checklist_delete', step_id=step.id) }}">
+            {{ csrf() }}
+            <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No checklist here.</p>
+      <form method="post" action="{{ url_for('admin.checklist_add', project_id=project.id) }}">
+        {{ csrf() }}
+        <input type="hidden" name="action" value="seed">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('plus') }} Add the standard list</button>
+      </form>
+      {% endif %}
+
+      <details class="adder">
+        <summary>{{ ico('plus') }} Add a step</summary>
+        <form method="post" action="{{ url_for('admin.checklist_add', project_id=project.id) }}">
+          {{ csrf() }}
+          <input class="in in--sm" name="label" placeholder="What has to be true before launch" required>
+          <input class="in in--sm" name="note" placeholder="Note, optional">
+          <button class="b b--sm" type="submit">Add</button>
+        </form>
+      </details>
+    </div>
+
+    {% if assets or credentials %}
+    <div class="pan__h">
+      {{ ico('key') }} <h2>Assets</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--plain" href="{{ url_for('admin.vault') }}">Vault</a>
+    </div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in assets %}
+          <tr class="{{ 'is-warn' if row.expires_on and (row.expires_on | days_until) < 30 }}">
+            <td>{{ row.label }}<span class="sub">{{ row.kind }}{% if row.provider %} &middot; {{ row.provider }}{% endif %}</span></td>
+            <td class="num">
+              {% if row.expires_on %}{{ row.expires_on | date_fmt('%d %b %y') }}
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% for row in credentials %}
+          <tr>
+            <td>{{ ico('key') }} {{ row.label }}
+              <span class="sub">{{ row.username or row.location or 'no username stored' }}</span></td>
+            <td class="num"><span class="sub">encrypted</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if tickets_rows %}
+    <div class="pan__h">{{ ico('life') }} <h2>Support</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in tickets_rows %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.ticket_detail', ticket_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.subject | shorten(40) }}</span></td>
+            <td class="num">{{ badge(TICKET_STATUS_LABELS.get(row.status, row.status),
+                                     'good' if row.status in ('resolved', 'closed') else 'warn') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if recurring %}
+    <div class="pan__h">{{ ico('refresh') }} <h2>Renews</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in recurring %}
+          <tr>
+            <td>{{ row.label }}<span class="sub">{{ row.period }}</span></td>
+            <td class="num">{{ row.amount | cmoney }}
+              <span class="sub">{{ row.next_due_on | date_fmt('%d %b %y') }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if is_owner() %}
+    <div class="pan__f">
+      <h3 class="sub-h">Where the money went</h3>
+      <dl class="dl dl--tight">
+        <dt>Invoiced</dt><dd>{{ pl.invoiced | money }}</dd>
+        <dt>Collected</dt><dd>{{ pl.collected | money }}</dd>
+        <dt>Costs tagged here</dt><dd>{{ pl.direct_cost | money }}</dd>
+        <dt>Expected cost</dt><dd>{{ pl.estimated_cost | money }}</dd>
+        <dt>Hours logged</dt><dd>{{ pl.hours }}</dd>
+        <dt>Effective rate</dt>
+        <dd>
+          {% if pl.hourly %}{{ pl.hourly | money }}/hour
+            <span class="sub">against a cost of {{ S('analytics.cost_per_hour') | money }}</span>
+          {% else %}<span class="muted">no hours logged</span>{% endif %}
+        </dd>
+      </dl>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<!-- ── the editable record ─────────────────────────────────────────────────── -->
+<form method="post" data-guard>
+  {{ csrf() }}
+  <div class="pan">
+    <div class="pan__h">{{ ico('pen') }} <h2>Project details</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="name">Name</label>
+          <input class="in" id="name" name="name" value="{{ project.name }}" required>
+        </div>
+        <div class="fi fi--3">
+          <label for="status">Status</label>
+          <select class="in" id="status" name="status">
+            {% for code, label in statuses.items() %}
+            <option value="{{ code }}" {{ 'selected' if project.status == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fi fi--3">
+          <label for="health">Health</label>
+          <select class="in" id="health" name="health">
+            {% for code, label in health.items() %}
+            <option value="{{ code }}" {{ 'selected' if project.health == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fi fi--3">
+          <label for="value">Value</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="value" name="value" type="number" step="1" value="{{ project.value | round | int }}"></div>
+        </div>
+        {% if is_owner() %}
+        <div class="fi fi--3">
+          <label for="internal_cost">Expected cost</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="internal_cost" name="internal_cost" type="number" step="1"
+                   value="{{ project.internal_cost | round | int }}"></div>
+        </div>
+        {% endif %}
+        <div class="fi fi--3">
+          <label for="recurring_yearly">Recurring per year</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="recurring_yearly" name="recurring_yearly" type="number" step="1"
+                   value="{{ project.recurring_yearly | round | int }}"></div>
+        </div>
+        <div class="fi fi--3">
+          <label for="billing_type">Billing</label>
+          <select class="in" id="billing_type" name="billing_type">
+            {% for code, label in [('milestone', 'By milestone'), ('fixed', 'On completion'),
+                                   ('retainer', 'Retainer'), ('hourly', 'Hourly')] %}
+            <option value="{{ code }}" {{ 'selected' if project.billing_type == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fi fi--3">
+          <label for="start_on">Started</label>
+          <input class="in" id="start_on" name="start_on" type="date" value="{{ project.start_on or '' }}">
+        </div>
+        <div class="fi fi--3">
+          <label for="target_on">Target</label>
+          <input class="in" id="target_on" name="target_on" type="date" value="{{ project.target_on or '' }}">
+        </div>
+        <div class="fi fi--3">
+          <label for="launched_on">Went live</label>
+          <input class="in" id="launched_on" name="launched_on" type="date" value="{{ project.launched_on or '' }}">
+        </div>
+        <div class="fi fi--3">
+          <label for="progress_pct">Progress, percent</label>
+          <input class="in" id="progress_pct" name="progress_pct" type="number" step="1"
+                 value="{{ project.progress_pct }}">
+          <span class="hint">Overwritten by the task board as soon as there are tasks.</span>
+        </div>
+
+        <div class="fi fi--6">
+          <label for="service_id">Service line</label>
+          <select class="in" id="service_id" name="service_id">
+            <option value="">Not set</option>
+            {% for row in services %}
+            <option value="{{ row.id }}" {{ 'selected' if project.service_id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fi fi--6">
+          <label for="package_id">Package</label>
+          <select class="in" id="package_id" name="package_id">
+            <option value="">Not from a package</option>
+            {% for row in packages %}
+            <option value="{{ row.id }}" {{ 'selected' if project.package_id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fi fi--12">
+          <label for="notes">Notes</label>
+          <textarea class="in" id="notes" name="notes" rows="3">{{ project.notes }}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save</button>
+    <a class="b b--ghost" href="{{ url_for('admin.projects_list') }}">Back to projects</a>
+    {% if is_owner() %}
+    <span class="spacer"></span>
+    <button class="b b--sm b--danger" type="submit" form="project-delete"
+            data-confirm="Delete {{ project.name }}? Only possible while nothing has been invoiced against it.">
+      {{ ico('trash') }} Delete
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+{% if is_owner() %}
+<form id="project-delete" method="post" hidden
+      action="{{ url_for('admin.project_delete', project_id=project.id) }}">
+  {{ csrf() }}
+</form>
+{% endif %}
+
+{% endblock %}

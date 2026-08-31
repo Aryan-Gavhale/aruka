@@ -1,0 +1,134 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, invoice_badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Invoices &middot; {{ rows | length }} shown</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.invoices_export', fy=fy or None) }}">
+  {{ ico('download') }} CSV</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.receivables') }}">{{ ico('warn') }} Chase</a>
+<a class="b b--sm" href="{{ url_for('admin.invoice_new') }}">{{ ico('plus') }} New invoice</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Invoiced', totals.invoiced | cmoney, 'In this view') }}
+  {{ kpi('Received', totals.collected | cmoney, 'Payments plus TDS', 'good') }}
+  {{ kpi('Outstanding', totals.outstanding | cmoney, 'Still owed',
+         'bad' if totals.outstanding else '') }}
+</div>
+
+<div class="pan">
+  <div class="pan__b">
+    <form class="filters" method="get">
+      <div class="fi fi--3">
+        <span>Status</span>
+        <select class="in in--sm" name="status" data-autofilter>
+          <option value="">All statuses</option>
+          <option value="open" {{ 'selected' if status == 'open' }}>Open (unpaid)</option>
+          {% for code, label in INVOICE_STATUS_LABELS.items() %}
+          <option value="{{ code }}" {{ 'selected' if status == code }}>
+            {{ label }}{% if counts.get(code) %} ({{ counts[code] }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--3">
+        <span>Client</span>
+        <select class="in in--sm" name="client" data-autofilter>
+          <option value="">Everyone</option>
+          {% for row in clients %}
+          <option value="{{ row.id }}" {{ 'selected' if client_id == row.id }}>{{ row.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--2">
+        <span>Year</span>
+        <select class="in in--sm" name="fy" data-autofilter>
+          <option value="">Every year</option>
+          {% for year in years | reverse %}
+          <option value="{{ year }}" {{ 'selected' if fy == year }}>
+            FY {{ year }}-{{ (year + 1) % 100 }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--2">
+        <span>Search</span>
+        <input class="in in--sm" type="search" name="q" value="{{ q }}" placeholder="Ref or client">
+      </div>
+      <div class="fi fi--2 fi--end">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('search') }}</button>
+        <a class="b b--sm b--plain" href="{{ url_for('admin.invoices_list') }}">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Invoice</th><th>Client</th><th>Issued</th><th>Due</th>
+            <th class="num">Total</th><th class="num">Balance</th><th>Status</th>
+            <th class="act">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set late = row.status in ('sent', 'part_paid', 'overdue') and row.due_on
+                        and (row.due_on | days_until) < 0 %}
+          <tr class="{{ 'is-flagged' if late }} {{ 'is-void' if row.cancelled_at }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ row.ref }}</a>
+              {% if row.kind != 'invoice' %}<span class="sub">{{ row.kind }}</span>{% endif %}
+              {% if row.project_name %}<span class="sub">{{ row.project_name | shorten(34) }}</span>{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a>
+            </td>
+            <td>{{ row.issued_on | date_fmt('%d %b %y') }}</td>
+            <td>
+              {% if row.due_on %}
+                {{ row.due_on | date_fmt('%d %b %y') }}
+                {% if late %}<span class="sub is-bad">{{ (row.due_on | days_until) | abs }} days late</span>{% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="num">{{ row.total | money }}</td>
+            <td class="num {{ 'is-bad' if row.balance }}">
+              {% if row.balance %}<b>{{ row.balance | money }}</b>{% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>{{ invoice_badge(row.status) }}</td>
+            <td class="act">
+              <a class="ib" title="PDF" target="_blank" rel="noopener"
+                 href="{{ url_for('admin.invoice_pdf', invoice_id=row.id) }}">{{ ico('doc') }}</a>
+              {% if row.balance %}
+              {{ wa_button(row.client_whatsapp, 'invoice', row.id) }}
+              {% endif %}
+              <a class="ib" title="Open" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ ico('pen') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('wallet') }}
+      <h3>No invoices here</h3>
+      <p>An invoice usually starts from an accepted quote or a project milestone, which copies
+        the lines across rather than making you retype them.</p>
+      <a class="b b--ghost" href="{{ url_for('admin.invoice_new') }}">Raise one</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

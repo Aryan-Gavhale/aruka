@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, bar, badge, sla_pill %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.tickets_list') }}">Support</a> &rsaquo; Performance &rsaquo; {{ fy }}</p>
+{% endblock %}
+
+{% block actions %}
+<form class="inline" method="get" action="{{ url_for('admin.tickets_report') }}">
+  <select class="in in--sm" name="fy" data-autofilter aria-label="Financial year">
+    {% for year in years | reverse %}
+    <option value="{{ year }}" {{ 'selected' if year == start_year }}>FY {{ year }}-{{ (year + 1) % 100 }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Raised', stats.total, fy) }}
+  {{ kpi('Still live', stats.live, 'open, in progress or with the client',
+         'warn' if stats.live else '') }}
+  {{ kpi('Inside SLA', stats.sla_pct ~ '%',
+         stats.sla_met ~ ' of ' ~ stats.resolved ~ ' resolved',
+         'good' if stats.sla_pct >= 90 else ('warn' if stats.sla_pct >= 75 else 'bad')) }}
+  {{ kpi('Reopened', stats.reopened, 'a resolved ticket that came back') }}
+</div>
+
+<div class="grid">
+  <div class="pan pan--6">
+    <h2 class="pan__h">{{ ico('clock') }} How fast, on average</h2>
+    <div class="pan__b">
+      <div class="kpis kpis--2">
+        {{ kpi('First reply', stats.avg_response_hours ~ 'h', 'from the moment it arrived') }}
+        {{ kpi('Full resolve', stats.avg_resolve_hours ~ 'h', 'arrival to resolved') }}
+      </div>
+      <p class="hint">Averages hide the worst cases, which is why the queue highlights breaches
+        individually. A ticket counts as breached against the policy that was live when it was
+        raised, not the one in force today.</p>
+
+      <hr class="rule">
+      <table class="tbl tbl--tight">
+        <thead><tr><th>Priority</th><th class="num">Raised</th><th class="num">Respond</th>
+          <th class="num">Resolve</th></tr></thead>
+        <tbody>
+          {% for code, label in priorities.items() %}
+          <tr>
+            <td>{{ label }}</td>
+            <td class="num">{{ stats.by_priority.get(code, 0) }}</td>
+            <td class="num">{{ policies[code].response_hours | round(1) }}h</td>
+            <td class="num">{{ policies[code].resolve_hours | round(1) }}h</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">A ticket is flagged at risk once {{ at_risk_pct }}% of its budget is gone.</p>
+    </div>
+  </div>
+
+  <div class="pan pan--6">
+    <h2 class="pan__h">{{ ico('chart') }} What people actually raise</h2>
+    <div class="pan__b">
+      {% set top = stats.by_category | map(attribute='n') | list %}
+      {% set peak = top | max if top else 1 %}
+      {% for row in stats.by_category %}
+      {{ bar(categories.get(row.category, row.category), row.n, peak, row.n) }}
+      {% endfor %}
+      {% if not stats.by_category %}
+      <p class="muted">Nothing raised in this year yet.</p>
+      {% else %}
+      <p class="hint">The top category is where a bit of upfront documentation, or a firmer
+        scope line, saves you the most unpaid hours.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="pan pan--12">
+    <h2 class="pan__h">{{ ico('warn') }} Needs you now</h2>
+    <div class="pan__b pan__b--flush">
+      {% if flagged %}
+      <table class="tbl tbl--rows">
+        <thead><tr><th>Ref</th><th>Subject</th><th>Client</th><th>Priority</th>
+          <th>Respond</th><th>Resolve</th></tr></thead>
+        <tbody>
+          {% for ticket, state in flagged %}
+          <tr class="{{ 'is-flagged' if state.state == 'breached' else 'is-warn' }}">
+            <td><a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}">{{ ticket.ref }}</a></td>
+            <td>{{ ticket.subject | shorten(64) }}</td>
+            <td>{{ ticket.client_name or ticket.contact_name or '-' }}</td>
+            <td>{{ badge(ticket.priority | upper, 'bad' if ticket.priority == 'p1' else 'warn') }}</td>
+            <td>{{ sla_pill(state.response.state) }}</td>
+            <td>{{ sla_pill(state.resolve.state) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px">Nothing at risk. Everything live is comfortably
+        inside the time you promised.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

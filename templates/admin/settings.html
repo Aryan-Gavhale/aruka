@@ -1,0 +1,160 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Settings &rsaquo; {{ tab_label }}</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.onboarding') }}">{{ ico('sliders') }} Setup wizard</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="tabs">
+  {% for code, spec in tabs.items() %}
+  <a class="tab {{ 'is-on' if tab == code }}"
+     href="{{ url_for('admin.settings_view', tab=code) }}">{{ spec[0] }}</a>
+  {% endfor %}
+</div>
+
+{% if tab == 'tax' %}
+<div class="note {{ 'note--info' if gst_on else 'note--warn' }}">
+  {% if gst_on %}
+  <b>Tax invoice mode.</b> Every new invoice charges GST, shows HSN/SAC and splits the tax
+  into CGST and SGST for a client in your own state, or IGST for one outside it. Documents
+  already issued keep the mode they went out under, which is what keeps the series honest.
+  {% else %}
+  <b>Bill of supply mode.</b> No tax is charged or collected, and documents say so
+  explicitly. Switch the invoice mode below on the day your registration comes through -
+  the whole system follows that one field.
+  {% endif %}
+</div>
+{% endif %}
+
+{% if tab == 'whatsapp' %}
+<div class="note {{ 'note--good' if provider == 'cloud_api' and cloud_ready else 'note--info' }}">
+  {% if provider == 'cloud_api' and cloud_ready %}
+  <b>Cloud API is live.</b> Messages send by themselves and report delivery back. Remember
+  that outside 24 hours of a contact's last reply, Meta only allows a template they have
+  approved - so those templates need their approved name filled in.
+  {% elif provider == 'cloud_api' %}
+  <b>Cloud API is selected but not configured.</b> It needs a phone number ID and a
+  permanent token. Until those are in, sends fall back to opening WhatsApp on your machine.
+  {% else %}
+  <b>Click-to-chat.</b> Nothing sends automatically: the panel opens WhatsApp with the
+  message already written, you press send, and it asks you to confirm what happened. No
+  Meta account, no approval queue, no monthly fee - and an honest log.
+  {% endif %}
+</div>
+{% endif %}
+
+{% if tab == 'seo' and not S('seo.indexable') %}
+<div class="note note--warn">
+  <b>The site is telling search engines to stay away.</b> That is right before launch and
+  wrong after it. Turn indexing on below when you are ready to be found.
+</div>
+{% endif %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  <div class="pan">
+    <div class="pan__h">
+      {{ ico('sliders') }} <h2>{{ tab_label }}</h2>
+      {% if intro %}<p>{{ intro }}</p>{% endif %}
+    </div>
+    <div class="pan__b">
+      <div class="grid">
+        {% for f in fields %}
+        {% set fid = f.key | replace('.', '-') %}
+        <div class="fi {{ 'fi--12' if f.kind in ('textarea', 'lines') else ('fi--4' if f.kind in ('colour', 'int', 'number', 'money', 'bool') else 'fi--6') }}">
+          {% if f.kind != 'bool' %}<label for="{{ fid }}">{{ f.label }}</label>{% endif %}
+
+          {% if f.kind == 'textarea' %}
+            <textarea class="in" id="{{ fid }}" name="{{ f.key }}" rows="3">{{ f.text }}</textarea>
+
+          {% elif f.kind == 'lines' %}
+            <textarea class="in in--code" id="{{ fid }}" name="{{ f.key }}" rows="6">{{ f.text }}</textarea>
+
+          {% elif f.kind == 'select' %}
+            <select class="in" id="{{ fid }}" name="{{ f.key }}">
+              {% for value, label in f.options %}
+              <option value="{{ value }}" {{ 'selected' if f.value == value }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+
+          {% elif f.kind == 'bool' %}
+            <label class="sw">
+              <input type="checkbox" id="{{ fid }}" name="{{ f.key }}" value="1" {{ 'checked' if f.value }}>
+              <span class="sw__t"></span>
+              <span class="sw__l">{{ f.label }}{% if f.help %}<span>{{ f.help }}</span>{% endif %}</span>
+            </label>
+
+          {% elif f.kind == 'colour' %}
+            <div class="colour">
+              <input type="color" value="{{ f.text or '#7C5CFF' }}" data-colour-for="{{ fid }}"
+                     aria-label="{{ f.label }} picker">
+              <input class="in" id="{{ fid }}" name="{{ f.key }}" value="{{ f.text }}" maxlength="9">
+            </div>
+
+          {% elif f.kind == 'money' %}
+            <div class="wrapin">
+              <span class="fix">&#8377;</span>
+              <input class="in" id="{{ fid }}" name="{{ f.key }}" type="number" step="1" value="{{ f.text }}">
+            </div>
+
+          {% elif f.kind in ('int', 'number') %}
+            <input class="in" id="{{ fid }}" name="{{ f.key }}" type="number"
+                   step="{{ '1' if f.kind == 'int' else '0.1' }}" value="{{ f.text }}">
+
+          {% elif f.kind == 'secret' %}
+            <input class="in" id="{{ fid }}" name="{{ f.key }}" type="password"
+                   value="{{ f.text }}" autocomplete="new-password">
+
+          {% elif f.kind == 'media' %}
+            {% set m = media_row(f.value) %}
+            <div class="pick" data-pick>
+              <div class="pick__pv" data-pick-preview>
+                {% if m %}<img src="{{ media_url(m, 'thumb') }}" alt="">{% else %}No image{% endif %}
+              </div>
+              <div class="pick__side">
+                <input type="hidden" id="{{ fid }}" name="{{ f.key }}" value="{{ f.text }}" data-pick-input>
+                <div class="row" style="gap:6px">
+                  <button class="b b--sm b--plain" type="button" data-pick-open>{{ ico('image') }} Choose</button>
+                  <button class="b b--sm b--ghost" type="button" data-pick-clear>Clear</button>
+                </div>
+                <span class="pick__meta" data-pick-meta>
+                  {% if m %}#{{ m.id }} &middot; {{ m.alt or m.title or 'no alt text' }}{% else %}Nothing selected{% endif %}
+                </span>
+              </div>
+            </div>
+
+          {% else %}
+            <input class="in" id="{{ fid }}" name="{{ f.key }}"
+                   type="{{ 'email' if f.kind == 'email' else ('tel' if f.kind == 'tel' else ('url' if f.kind == 'url' else 'text')) }}"
+                   value="{{ f.text }}">
+          {% endif %}
+
+          {% if f.help and f.kind != 'bool' %}<span class="hint">{{ f.help }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save {{ tab_label | lower }}</button>
+    <span class="savebar__note">Only what actually changed is written, and the change is
+      recorded in the activity log.</span>
+    {% if tab == 'whatsapp' and provider == 'cloud_api' %}
+    <span class="spacer"></span>
+    <button class="b b--ghost" type="submit" formaction="{{ url_for('admin.settings_test_whatsapp') }}"
+            formmethod="post">
+      {{ ico('whatsapp') }} Send myself a test
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+{% endblock %}

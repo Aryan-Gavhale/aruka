@@ -1,0 +1,93 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Projects &middot; {{ rows | length }} shown</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm" href="{{ url_for('admin.project_new') }}">{{ ico('plus') }} New project</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="tabs">
+  <a class="tab {{ 'is-on' if status == 'live' }}"
+     href="{{ url_for('admin.projects_list', status='live') }}">
+    In flight{% if counts.live %} <em>{{ counts.live }}</em>{% endif %}
+  </a>
+  {% for code, label in statuses.items() %}
+  <a class="tab {{ 'is-on' if status == code }}"
+     href="{{ url_for('admin.projects_list', status=code) }}">
+    {{ label }}{% if counts.get(code) %} <em>{{ counts[code] }}</em>{% endif %}
+  </a>
+  {% endfor %}
+  <a class="tab {{ 'is-on' if status == 'all' }}"
+     href="{{ url_for('admin.projects_list', status='all') }}">Everything</a>
+</div>
+
+<div class="pan">
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Project</th><th>Client</th><th>Progress</th><th>Target</th>
+            <th class="num">Value</th><th>Open work</th><th>Health</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set days = row.target_on | days_until %}
+          <tr class="{{ 'is-flagged' if row.health == 'red' }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.project_detail', project_id=row.id) }}">{{ row.name }}</a>
+              <span class="sub mono">{{ row.ref }} &middot; {{ statuses.get(row.status, row.status) }}</span>
+            </td>
+            <td>
+              <a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a>
+            </td>
+            <td style="min-width:130px">
+              <span class="prog"><span class="prog__f" style="width: {{ row.progress_pct }}%"></span></span>
+              <span class="sub">{{ row.progress_pct }}%</span>
+            </td>
+            <td>
+              {% if row.target_on %}
+                {{ row.target_on | date_fmt('%d %b %y') }}
+                <span class="sub {{ 'is-bad' if days is not none and days < 0 }}">
+                  {% if days is none %}—
+                  {% elif days < 0 %}{{ days | abs }} days over
+                  {% else %}{{ days }} days left{% endif %}
+                </span>
+              {% else %}<span class="muted">no date</span>{% endif %}
+            </td>
+            <td class="num">{{ row.value | cmoney }}</td>
+            <td>
+              {% if row.open_tasks %}{{ row.open_tasks }} task{{ '' if row.open_tasks == 1 else 's' }}{% endif %}
+              {% if row.live_tickets %}{{ badge(row.live_tickets ~ ' ticket', 'warn') }}{% endif %}
+              {% if not row.open_tasks and not row.live_tickets %}<span class="muted">clear</span>{% endif %}
+            </td>
+            <td>
+              {{ badge(health.get(row.health, row.health),
+                       'bad' if row.health == 'red' else ('warn' if row.health == 'amber' else 'good')) }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('rocket') }}
+      <h3>No projects{% if status != 'all' %} in this state{% endif %}</h3>
+      <p>A won lead converts straight into a client and a project, with the payment schedule
+        and launch checklist already in place.</p>
+      <a class="b b--ghost" href="{{ url_for('admin.leads_board') }}">Open the pipeline</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

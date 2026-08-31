@@ -1,0 +1,66 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import crumbs with context %}
+
+{% block progress %}<div class="bar" role="presentation"></div>{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap wrap--tight">
+    {{ crumbs([(row.title, none)]) }}
+    <h1 class="r r--none">{{ row.title }}</h1>
+    {% if row.intro %}<p class="lede r r--none" style="--d:120ms">{{ row.intro }}</p>{% endif %}
+    <p class="small mt">Last updated {{ row.updated_at | date_fmt }}</p>
+  </div>
+</section>
+
+<section class="sec sec--flush">
+  <div class="wrap g-side">
+    <div class="prose r">{{ row.body | md_lite }}</div>
+
+    <aside>
+      {% if others %}
+      <div class="toc">
+        <h4>Other policies</h4>
+        <ol>
+          {% for item in others %}
+          <li><a href="{{ url_for('public.legal', slug=item.slug) }}">{{ item.title }}</a></li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      <div class="card mt r r--right">
+        <h4>Questions about this?</h4>
+        <p class="small">Ask before you sign anything rather than after. We would rather
+          explain a clause than argue about it later.</p>
+        {% if contact.email %}
+        <a class="btn btn--ghost btn--block mt" href="mailto:{{ contact.email }}">
+          {{ ico('mail') }} {{ contact.email }}</a>
+        {% endif %}
+      </div>
+
+      <div class="banner mt">
+        {{ ico('warn') }}
+        <span>This is our own policy, not legal advice for your business. Have your own
+          lawyer read anything you are relying on.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section class="sec sec--tight">
+  <div class="wrap wrap--tight">
+    <dl class="dl">
+      <dt>Entity</dt><dd>{{ S('brand.legal_name') or brand_name }}</dd>
+      {% if S('gst.gstin') %}<dt>GSTIN</dt><dd class="mono">{{ S('gst.gstin') }}</dd>{% endif %}
+      {% if S('tax.pan') %}<dt>PAN</dt><dd class="mono">{{ S('tax.pan') }}</dd>{% endif %}
+      {% if contact.address %}<dt>Address</dt><dd>{{ contact.address }}</dd>{% endif %}
+      {% if contact.email %}<dt>Contact</dt><dd>{{ contact.email }}</dd>{% endif %}
+      <dt>Governing law</dt>
+      <dd>Courts at {{ S('doc.jurisdiction_city') }}, {{ S('doc.jurisdiction_state') }}, India</dd>
+    </dl>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.ratecard') }}">{{ ico('list') }} Rate card</a>
+<a class="b b--sm" href="{{ url_for('admin.quote_new') }}">{{ ico('calc') }} New quote</a>
+{% endblock %}
+
+{% block content %}
+
+<form class="filters" method="get" action="{{ url_for('admin.quotes_list') }}">
+  <input class="in" type="search" name="q" value="{{ q }}"
+         placeholder="Reference, title, lead or client">
+  <select class="in" name="status">
+    <option value="">Any status</option>
+    {% for code, label in statuses.items() %}
+    <option value="{{ code }}" {{ 'selected' if status == code }}>
+      {{ label }}{% if counts.get(code) %} ({{ counts[code] }}){% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  <button class="b b--sm" type="submit">Filter</button>
+  {% if q or status %}<a class="b b--sm b--ghost" href="{{ url_for('admin.quotes_list') }}">Clear</a>{% endif %}
+</form>
+
+<div class="tbl-wrap">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Quote</th><th>For</th><th>Package</th>
+        <th class="num">One-time</th><th class="num">Renewal</th>
+        {% if is_owner() %}<th class="num">Margin</th>{% endif %}
+        <th>Valid to</th><th>Status</th><th class="act"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for quote in rows %}
+      {% set margin = (quote.taxable_value or 0) - (quote.internal_cost or 0) %}
+      <tr>
+        <td>
+          <a class="strong" href="{{ url_for('admin.quote_detail', quote_id=quote.id) }}">{{ quote.ref }}</a>
+          <span class="sub">{{ quote.created_at | date_fmt }}
+            {% if quote.source == 'public' %} &middot; from the website{% endif %}</span>
+        </td>
+        <td>
+          {% if quote.lead_ref %}
+          <a href="{{ url_for('admin.lead_detail', lead_id=quote.lead_id) }}">{{ quote.lead_name }}</a>
+          <span class="sub">{{ quote.lead_ref }}</span>
+          {% elif quote.client_name %}
+          <a href="{{ url_for('admin.client_detail', client_id=quote.client_id) }}">{{ quote.client_name }}</a>
+          {% else %}
+          <span class="muted">not attached</span>
+          {% endif %}
+        </td>
+        <td>
+          {{ quote.package_name or quote.title or 'Custom' }}
+          {% if quote.rush %}<span class="sub">rush</span>{% endif %}
+        </td>
+        <td class="num strong">{{ quote.total | money }}</td>
+        <td class="num">{{ quote.recurring_yearly | money if quote.recurring_yearly else '-' }}</td>
+        {% if is_owner() %}
+        <td class="num">
+          <span class="{{ 'is-bad' if margin <= 0 else ('is-warn' if quote.taxable_value and margin / quote.taxable_value < 0.35) }}">
+            {{ margin | cmoney }}
+          </span>
+          <span class="sub">
+            {{ ((margin / quote.taxable_value * 100) | round(1)) if quote.taxable_value else 0 }}%
+          </span>
+        </td>
+        {% endif %}
+        <td>
+          {% if quote.valid_until %}
+            {% set left = quote.valid_until | days_until %}
+            <span class="{{ 'is-bad' if left is not none and left < 0 and quote.status in ('draft', 'sent') }}">
+              {{ quote.valid_until | date_fmt('%d %b') }}
+            </span>
+          {% else %}-{% endif %}
+        </td>
+        <td>
+          {% set tones = {'draft': 'mute', 'sent': 'info', 'accepted': 'good',
+                          'declined': 'bad', 'expired': 'warn', 'superseded': 'mute'} %}
+          {{ badge(statuses.get(quote.status, quote.status), tones.get(quote.status, '')) }}
+        </td>
+        <td class="act">
+          <a class="ib" title="Open" href="{{ url_for('admin.quote_detail', quote_id=quote.id) }}">{{ ico('pen') }}</a>
+        </td>
+      </tr>
+      {% endfor %}
+
+      {% if not rows %}
+      <tr><td colspan="{{ 9 if is_owner() else 8 }}" class="empty">
+        {% if q or status %}Nothing matches that filter.
+        {% else %}No quotes yet. Price a lead from its record, or
+          <a href="{{ url_for('admin.quote_new') }}">start one here</a>.{% endif %}
+      </td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.tickets_list') }}">Support</a> &rsaquo; New ticket</p>
+{% endblock %}
+
+{% block content %}
+<form class="pan pan--8" method="post" action="{{ url_for('admin.ticket_new') }}">
+  {{ csrf() }}
+  <h2 class="pan__h">{{ ico('life') }} Log a ticket on their behalf</h2>
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--12"><label for="subject">Subject <em>*</em></label>
+        <input class="in" id="subject" name="subject" required
+               placeholder="Contact form on the home page stopped emailing us"></div>
+
+      <div class="fi fi--6"><label for="client_id">Client</label>
+        <select class="in" id="client_id" name="client_id" data-fill-contact>
+          <option value="">Not a client yet</option>
+          {% for row in clients %}
+          <option value="{{ row.id }}" {{ 'selected' if client and client.id == row.id }}
+                  data-name="{{ row.contact_name or '' }}" data-email="{{ row.email or '' }}"
+                  data-phone="{{ row.phone or '' }}">{{ row.name }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Attaching a client is what lets you bill the time later.</span></div>
+
+      <div class="fi fi--6"><label for="project_id">Project</label>
+        <select class="in" id="project_id" name="project_id">
+          <option value="">Not project-specific</option>
+          {% for row in projects %}
+          <option value="{{ row.id }}" data-client="{{ row.client_id }}">{{ row.ref }} - {{ row.name }}</option>
+          {% endfor %}
+        </select></div>
+
+      <div class="fi fi--4"><label for="contact_name">Who reported it</label>
+        <input class="in" id="contact_name" name="contact_name"
+               value="{{ client.contact_name if client else '' }}"></div>
+      <div class="fi fi--4"><label for="contact_email">Email</label>
+        <input class="in" id="contact_email" name="contact_email" type="email"
+               value="{{ client.email if client else '' }}"></div>
+      <div class="fi fi--4"><label for="contact_phone">Phone</label>
+        <input class="in" id="contact_phone" name="contact_phone" type="tel"
+               value="{{ client.phone if client else '' }}"></div>
+
+      <div class="fi fi--6"><label for="category">Category</label>
+        <select class="in" id="category" name="category">
+          {% for code, label in categories.items() %}
+          <option value="{{ code }}" {{ 'selected' if code == 'bug' }}>{{ label }}</option>
+          {% endfor %}
+        </select></div>
+
+      <div class="fi fi--6"><label for="priority">Priority</label>
+        <select class="in" id="priority" name="priority" data-sla-pick>
+          {% for code, label in priorities.items() %}
+          <option value="{{ code }}" {{ 'selected' if code == 'p3' }}
+                  data-sla="Respond within {{ policies[code].response_hours | round(1) }}h,
+                            resolve within {{ policies[code].resolve_hours | round(1) }}h">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint" data-sla-note>
+          Respond within {{ policies['p3'].response_hours | round(1) }}h,
+          resolve within {{ policies['p3'].resolve_hours | round(1) }}h.
+        </span></div>
+
+      <div class="fi fi--12"><label for="body">What happened</label>
+        <textarea class="in" id="body" name="body" rows="7"
+                  placeholder="Their words, as closely as you can. This starts the thread."></textarea></div>
+
+      <div class="fi fi--12 fi--check">
+        <label class="chk"><input type="checkbox" name="is_change_request" value="1">
+          <span>This is really a change request, not a fault</span></label>
+        <span class="hint">Flagging it now keeps your SLA numbers honest, and the
+          change-request button on the ticket turns it straight into a priced quote.</span>
+      </div>
+    </div>
+  </div>
+  <div class="pan__f">
+    <button class="b" type="submit">{{ ico('check') }} Raise it</button>
+    <a class="b b--ghost" href="{{ url_for('admin.tickets_list') }}">Cancel</a>
+  </div>
+</form>
+
+<div class="pan pan--4">
+  <h2 class="pan__h">{{ ico('clock') }} What you have promised</h2>
+  <div class="pan__b">
+    <table class="tbl tbl--tight">
+      <thead><tr><th>Priority</th><th class="num">Respond</th><th class="num">Resolve</th></tr></thead>
+      <tbody>
+        {% for code, label in priorities.items() %}
+        <tr>
+          <td>{{ label }}</td>
+          <td class="num">{{ policies[code].response_hours | round(1) }}h</td>
+          <td class="num">{{ policies[code].resolve_hours | round(1) }}h</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">The clock starts the moment you save, from these numbers.
+      Editing a policy later never rewrites a ticket already in flight.
+      <a href="{{ url_for('admin.sla_list') }}">Change the policies</a>.</p>
+  </div>
+</div>
+{% endblock %}

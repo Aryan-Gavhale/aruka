@@ -1,0 +1,128 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge, sla_pill, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Support &rsaquo; {{ statuses.get(status, 'Live queue' if status == 'live' else 'All') }}</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.tickets_report') }}">{{ ico('chart') }} Performance</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.sla_list') }}">{{ ico('clock') }} SLA policies</a>
+<a class="b b--sm" href="{{ url_for('admin.ticket_new') }}">{{ ico('plus') }} Raise a ticket</a>
+{% endblock %}
+
+{% block content %}
+
+{% if flagged %}
+<div class="note note--bad">
+  {{ flagged }} ticket{{ '' if flagged == 1 else 's' }} in this view {{ 'is' if flagged == 1 else 'are' }}
+  at risk or already past the time you promised. Those sit at the top.
+</div>
+{% endif %}
+
+<form class="filters" method="get" action="{{ url_for('admin.tickets_list') }}">
+  <div class="tabs">
+    <a class="tab {{ 'is-on' if status == 'live' }}"
+       href="{{ url_for('admin.tickets_list') }}">Live <span class="tab__n">{{ counts.get('live', 0) }}</span></a>
+    {% for code, label in statuses.items() %}
+    <a class="tab {{ 'is-on' if status == code }}"
+       href="{{ url_for('admin.tickets_list', status=code) }}">{{ label }}
+      <span class="tab__n">{{ counts.get(code, 0) }}</span></a>
+    {% endfor %}
+    <a class="tab {{ 'is-on' if status == 'all' }}"
+       href="{{ url_for('admin.tickets_list', status='all') }}">Everything</a>
+  </div>
+
+  <div class="row">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input class="in" name="q" value="{{ q }}" placeholder="Search subject, body, ref or email">
+    <select class="in" name="priority">
+      <option value="">Any priority</option>
+      {% for code, label in priorities.items() %}
+      <option value="{{ code }}" {{ 'selected' if priority == code }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select class="in" name="category">
+      <option value="">Any category</option>
+      {% for code, label in categories.items() %}
+      <option value="{{ code }}" {{ 'selected' if category == code }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select class="in" name="client">
+      <option value="">Any client</option>
+      {% for row in clients %}
+      <option value="{{ row.id }}" {{ 'selected' if client_id == row.id }}>{{ row.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="in" name="sla">
+      <option value="">Any SLA state</option>
+      <option value="at_risk" {{ 'selected' if sla == 'at_risk' }}>At risk</option>
+      <option value="breached" {{ 'selected' if sla == 'breached' }}>Breached</option>
+    </select>
+    <button class="b b--sm" type="submit">{{ ico('search') }} Filter</button>
+    <a class="b b--sm b--ghost" href="{{ url_for('admin.tickets_list') }}">Clear</a>
+  </div>
+</form>
+
+{% if rows %}
+<div class="pan pan--12">
+  <div class="pan__b pan__b--flush">
+    <table class="tbl tbl--rows">
+      <thead>
+        <tr>
+          <th>Ref</th><th>Subject</th><th>Client</th><th>Priority</th>
+          <th>Status</th><th>Respond</th><th>Resolve</th><th>Raised</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ticket, state in rows %}
+        <tr class="{{ 'is-flagged' if state.state == 'breached' else ('is-warn' if state.state == 'at_risk' else '') }}">
+          <td><a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}">{{ ticket.ref }}</a></td>
+          <td>
+            <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}">{{ ticket.subject | shorten(60) }}</a>
+            <span class="sub">
+              {{ categories.get(ticket.category, ticket.category) }}
+              {% if ticket.is_change_request %} &middot; change request{% endif %}
+              {% if ticket.reopened_count %} &middot; reopened {{ ticket.reopened_count }}&times;{% endif %}
+            </span>
+          </td>
+          <td>
+            {% if ticket.client_name %}
+            <a href="{{ url_for('admin.client_detail', client_id=ticket.client_id) }}">{{ ticket.client_name }}</a>
+            {% else %}<span class="muted">{{ ticket.contact_name or 'Unknown' }}</span>{% endif %}
+            {% if ticket.project_name %}<span class="sub">{{ ticket.project_name | shorten(28) }}</span>{% endif %}
+          </td>
+          <td>{{ badge(ticket.priority | upper,
+                       'bad' if ticket.priority == 'p1' else ('warn' if ticket.priority == 'p2' else 'mute')) }}</td>
+          <td>{{ badge(statuses.get(ticket.status, ticket.status),
+                       'good' if ticket.status in ('resolved', 'closed') else
+                       ('warn' if ticket.status == 'waiting_client' else 'info')) }}</td>
+          <td>{{ sla_pill(state.response.state) }}
+            {% if state.response.state in ('on_time', 'at_risk') %}
+            <span class="sub">{{ state.response.hours_left }}h left</span>
+            {% endif %}
+          </td>
+          <td>{{ sla_pill(state.resolve.state) }}
+            {% if state.resolve.state in ('on_time', 'at_risk') %}
+            <span class="sub">{{ state.resolve.hours_left }}h left</span>
+            {% endif %}
+          </td>
+          <td>{{ ticket.created_at | ago }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="empty">
+  {{ ico('life') }}
+  <h2>Nothing in this queue</h2>
+  <p>Clients can raise their own at <a href="{{ url_for('public.support_new') }}">/support/new</a>,
+    or you can log one yourself.</p>
+  <a class="b" href="{{ url_for('admin.ticket_new') }}">{{ ico('plus') }} Raise a ticket</a>
+</div>
+{% endif %}
+
+{% endblock %}

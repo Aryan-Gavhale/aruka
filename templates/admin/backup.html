@@ -1,0 +1,115 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Backup and restore</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm" href="{{ url_for('admin.backup_download') }}">{{ ico('download') }} Download a backup</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="note note--warn">
+  <b>The keys are not in the backup.</b> <code>db/secret.key</code> signs sessions and
+  <code>db/vault.key</code> decrypts stored credentials. Copy both somewhere safe, once. Restore
+  a database without its vault key and every saved password becomes unreadable ciphertext -
+  the rest of the data is fine, but those are gone.
+</div>
+
+<div class="grid">
+  <section class="pan pan--6">
+    <div class="pan__h">
+      {{ ico('database') }} <h2>What is in here</h2>
+      <p>One SQLite file plus the uploads folder. That is the whole system - there is no
+        hidden state anywhere else.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for table, n in counts.items() %}
+          <tr>
+            <th>{{ table | replace('_', ' ') | capitalize }}</th>
+            <td class="num">{{ n }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="row--total">
+            <th>Database file</th>
+            <td class="num">{{ (db_bytes / 1024 / 1024) | round(2) }} MB</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pan__f">
+      <a class="b" href="{{ url_for('admin.backup_download') }}">{{ ico('download') }} Download now</a>
+      <form method="post" action="{{ url_for('admin.backup_keep') }}">
+        {{ csrf() }}
+        <button class="b b--ghost" type="submit">{{ ico('save') }} Download and keep a copy on the server</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="pan pan--6">
+    <div class="pan__h">
+      {{ ico('refresh') }} <h2>Restore</h2>
+      <p>Replaces everything currently here with the contents of a backup zip.</p>
+    </div>
+    <div class="pan__b">
+      <div class="note note--bad">
+        <b>This is not reversible from inside the panel.</b> The database being replaced is
+        saved next to the backups as <code>pre-restore-….db</code> first, so a mistake is
+        recoverable by hand - but every session ends and you sign in with the accounts from
+        the backup, not the ones you have now.
+      </div>
+
+      <form method="post" enctype="multipart/form-data">
+        {{ csrf() }}
+        <input type="hidden" name="action" value="restore">
+        <div class="grid">
+          <div class="fi fi--12">
+            <label for="archive">Backup file</label>
+            <input class="in" id="archive" name="archive" type="file" accept=".zip" required>
+            <span class="hint">A zip produced by this app - it is checked for
+              <code>db/aruka.db</code> before anything is touched.</span>
+          </div>
+          <div class="fi fi--6">
+            <label for="confirm">Type REPLACE to confirm</label>
+            <input class="in" id="confirm" name="confirm" autocomplete="off" required
+                   placeholder="REPLACE">
+          </div>
+        </div>
+        <button class="b b--danger" type="submit">{{ ico('warn') }} Restore from this file</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="pan pan--12">
+    <div class="pan__h">
+      {{ ico('save') }} <h2>Copies kept on the server</h2>
+      <p>Only the ones you asked to keep. A copy on the same machine is not a backup - move
+        one off it regularly.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if backups %}
+      <table class="tbl tbl--tight">
+        <thead><tr><th>File</th><th>Made</th><th class="num">Size</th></tr></thead>
+        <tbody>
+          {% for row in backups %}
+          <tr>
+            <td class="mono">{{ row.name }}</td>
+            <td>{{ row.when }}</td>
+            <td class="num">{{ (row.bytes / 1024 / 1024) | round(2) }} MB</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing kept on the server yet.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{% endblock %}

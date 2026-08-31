@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Your account</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  <div class="pan pan--narrow">
+    <div class="pan__h">
+      {{ ico('users') }} <h2>{{ user.name or user.email }}</h2>
+      <span class="spacer"></span>
+      {{ badge(ROLE_LABELS.get(user.role, user.role), 'brand' if user.role == 'owner' else '') }}
+    </div>
+
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="name">Name</label>
+          <input class="in" id="name" name="name" value="{{ user.name }}" required>
+          <span class="hint">Appears on documents you sign and in the activity log.</span>
+        </div>
+        <div class="fi fi--6">
+          <label for="email">Email</label>
+          <input class="in" id="email" name="email" type="email" value="{{ user.email }}" required>
+          <span class="hint">Also what you sign in with.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pan__b">
+      <h3 class="sub-h">Change your password</h3>
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="current_password">Current password</label>
+          <input class="in" id="current_password" name="current_password" type="password"
+                 autocomplete="current-password">
+        </div>
+        <div class="fi fi--6">
+          <label for="new_password">New password</label>
+          <input class="in" id="new_password" name="new_password" type="password"
+                 autocomplete="new-password">
+          <span class="hint">At least 10 characters. Leave both blank to keep the one you have.
+            Changing it signs you out here, which is the point.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pan__f">
+      <dl class="dl dl--tight">
+        <dt>Signed in</dt><dd>{{ user.last_login_at | ago if user.last_login_at else 'first session' }}</dd>
+        <dt>Account created</dt><dd>{{ user.created_at | date_fmt }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save</button>
+    <span class="savebar__note">Sessions last a fortnight, and signing out ends this one
+      immediately.</span>
+    <span class="spacer"></span>
+    <a class="b b--ghost" href="{{ url_for('admin.dashboard') }}">Back to the dashboard</a>
+  </div>
+</form>
+
+{% endblock %}

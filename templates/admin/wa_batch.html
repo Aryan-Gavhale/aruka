@@ -1,0 +1,88 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.wa_bulk') }}">Bulk WhatsApp</a> &rsaquo; {{ batch_id }}</p>
+{% endblock %}
+
+{% block content %}
+
+{% set done = rows | rejectattr('status', 'in', ['queued']) | list %}
+
+<div class="kpis kpis--3">
+  {{ kpi('In this batch', rows | length) }}
+  {{ kpi('Handled', done | length, 'Sent, ready or failed', 'good' if done else '') }}
+  {{ kpi('Still queued', pending | length, 'Waiting on you', 'warn' if pending else 'good') }}
+</div>
+
+<div class="pan pan--12">
+  <h2 class="pan__h">{{ ico('whatsapp') }} The queue</h2>
+  <div class="pan__b">
+    {% if pending %}
+      {% if provider.sends_itself %}
+      <form class="row" method="post" style="gap:8px"
+            action="{{ url_for('admin.wa_batch_run', batch_id=batch_id) }}"
+            data-confirm="Send up to {{ limit }} messages now?">
+        {{ csrf() }}
+        <button class="b" type="submit">{{ ico('whatsapp') }} Send the next {{ limit }}</button>
+        <span class="hint">Stops after {{ limit }} so you can check the log before continuing.</span>
+      </form>
+      {% else %}
+      <p>Open each one, press send in WhatsApp, then mark it. The link carries the personalised
+      text, so there is nothing to type.</p>
+      {% endif %}
+    {% else %}
+    <p class="muted">Nothing left queued in this batch.</p>
+    {% endif %}
+  </div>
+
+  <div class="pan__b">
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr><th>To</th><th>Message</th><th>Status</th><th class="act"></th></tr>
+        </thead>
+        <tbody>
+          {% for message in rows %}
+          <tr>
+            <td>
+              <span class="strong">{{ message.to_name or '-' }}</span>
+              <span class="sub">+{{ message.to_number | wa }}</span>
+            </td>
+            <td class="cell--wide"><span class="sub sub--body">{{ message.body | shorten(160) }}</span></td>
+            <td>
+              {% set tones = {'delivered': 'good', 'read': 'good', 'sent': 'info',
+                              'ready': 'warn', 'queued': 'mute', 'failed': 'bad'} %}
+              {{ badge(labels.get(message.status, message.status), tones.get(message.status, '')) }}
+              {% if message.error %}<span class="sub is-bad">{{ message.error | shorten(60) }}</span>{% endif %}
+            </td>
+            <td class="act">
+              {% if message.status in ('queued', 'ready') %}
+              <a class="ib" title="Open and send"
+                 href="{{ url_for('admin.wa_handoff', message_id=message.id) }}">{{ ico('external') }}</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if pending %}
+  <div class="pan__f">
+    <form method="post" action="{{ url_for('admin.wa_batch_cancel', batch_id=batch_id) }}"
+          data-confirm="Drop the {{ pending | length }} messages still queued? Anything already sent stays in the log.">
+      {{ csrf() }}
+      <button class="b b--sm b--danger" type="submit">
+        {{ ico('trash') }} Cancel the {{ pending | length }} still queued
+      </button>
+    </form>
+    <span class="spacer"></span>
+    <a class="b b--sm b--ghost" href="{{ url_for('admin.wa_log') }}">Whole log</a>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

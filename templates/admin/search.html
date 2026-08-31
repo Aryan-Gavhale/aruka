@@ -1,0 +1,138 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge, stage_badge, invoice_badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  {% if q %}{{ total }} result{{ '' if total == 1 else 's' }} for “{{ q }}”
+  {% else %}Search{% endif %}
+</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="pan">
+  <div class="pan__b">
+    <form class="searchbig" method="get" action="{{ url_for('admin.search') }}">
+      <input class="in in--lg" name="q" value="{{ q }}" autofocus
+             placeholder="Name, company, phone, email, or any reference">
+      <button class="b" type="submit">{{ ico('search') }} Search</button>
+    </form>
+    <p class="hint">References work too: a lead's <code>L-</code>, an invoice number, a ticket
+      <code>T-</code>, a GSTIN. Two characters is the minimum.</p>
+  </div>
+</div>
+
+{% if q and not total %}
+<div class="pan">
+  <div class="empty">
+    {{ ico('search') }}
+    <h3>Nothing matches “{{ q }}”</h3>
+    <p>Leads, clients, projects, invoices, tickets, documents and quotes were all checked.</p>
+  </div>
+</div>
+{% endif %}
+
+{% macro group(title, icon, rows) %}
+{% if rows %}
+<section class="pan pan--6">
+  <div class="pan__h">{{ ico(icon) }} <h2>{{ title }}</h2>
+    <span class="spacer"></span><span class="sub">{{ rows | length }}</span></div>
+  <div class="pan__b pan__b--flush">
+    <table class="tbl tbl--tight">
+      <tbody>{{ caller() }}</tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+<div class="grid">
+
+  {% call group('Leads', 'funnel', results.leads) %}
+    {% for row in results.leads %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.lead_detail', lead_id=row.id) }}">{{ row.name }}</a>
+        <span class="sub">{{ row.company or row.email or row.phone or row.ref }}</span>
+      </td>
+      <td class="num">{{ stage_badge(row.stage) }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Clients', 'briefcase', results.clients) %}
+    {% for row in results.clients %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.client_detail', client_id=row.id) }}">{{ row.name }}</a>
+        <span class="sub">{{ row.contact_name or row.email or row.ref }}</span>
+      </td>
+      <td class="num"><span class="sub mono">{{ row.ref }}</span></td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Projects', 'rocket', results.projects) %}
+    {% for row in results.projects %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.project_detail', project_id=row.id) }}">{{ row.name }}</a>
+        <span class="sub">{{ row.client_name }}</span>
+      </td>
+      <td class="num">{{ badge(row.status, 'good' if row.status == 'active' else '') }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Invoices', 'wallet', results.invoices) %}
+    {% for row in results.invoices %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ row.ref }}</a>
+        <span class="sub">{{ row.client_name }}</span>
+      </td>
+      <td class="num">{{ row.total | money }} {{ invoice_badge(row.status) }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Tickets', 'life', results.tickets) %}
+    {% for row in results.tickets %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.ticket_detail', ticket_id=row.id) }}">{{ row.ref }}</a>
+        <span class="sub">{{ row.subject | shorten(52) }}</span>
+      </td>
+      <td class="num">{{ badge(row.priority | upper, 'bad' if row.priority == 'p1' else '') }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Documents', 'doc', results.documents) %}
+    {% for row in results.documents %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.document_detail', document_id=row.id) }}">{{ row.title }}</a>
+        <span class="sub mono">{{ row.ref }}</span>
+      </td>
+      <td class="num">{{ badge(row.status) }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+  {% call group('Quotes', 'calc', results.quotes) %}
+    {% for row in results.quotes %}
+    <tr>
+      <td>
+        <a class="rowlink" href="{{ url_for('admin.quote_detail', quote_id=row.id) }}">{{ row.title or row.ref }}</a>
+        <span class="sub mono">{{ row.ref }}</span>
+      </td>
+      <td class="num">{{ row.total | money }}</td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+
+</div>
+
+{% endblock %}

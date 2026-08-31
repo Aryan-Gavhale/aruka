@@ -1,0 +1,69 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap wrap--tight mid">
+    <span class="card__i r r--in" style="margin:0 auto 22px; width:64px; height:64px;
+          color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, transparent)">
+      {{ ico('check') }}</span>
+    <h1 class="r r--none">We have it</h1>
+    <p class="lede r r--none" style="--d:120ms">
+      Logged as the reference below. Quote it if you follow up on any channel.</p>
+
+    <p class="mt r r--none" style="--d:170ms"><span class="ref">{{ ticket.ref }}</span></p>
+    <p class="small">
+      <button class="btn btn--plain" type="button" data-copy="{{ ticket.ref }}">Copy the reference</button>
+    </p>
+  </div>
+</section>
+
+<section class="sec sec--flush">
+  <div class="wrap wrap--tight">
+    <div class="card r">
+      <div class="tags" style="margin-top:0">
+        <span class="chip chip--live">{{ PRIORITY_LABELS[ticket.priority] }}</span>
+        <span class="chip">{{ TICKET_STATUS_LABELS[ticket.status] }}</span>
+      </div>
+
+      <h2 style="margin:16px 0 6px">{{ ticket.subject }}</h2>
+      <p class="small">Raised {{ ticket.created_at | datetime_fmt }}</p>
+
+      <dl class="dl mt">
+        <dt>First reply due</dt>
+        <dd>{{ ticket.response_due_at | datetime_fmt }}
+          <span class="small">(within {{ state.policy.response_hours | int }} hours)</span></dd>
+        <dt>Target resolution</dt>
+        <dd>{{ ticket.resolve_due_at | datetime_fmt }}
+          <span class="small">(within {{ state.policy.resolve_hours | int }} hours)</span></dd>
+        <dt>Replies go to</dt>
+        <dd>{{ ticket.contact_email }}</dd>
+      </dl>
+
+      {% if ticket.body %}
+      <h4 style="margin-top:26px">What you told us</h4>
+      <div class="msg msg--them">{{ ticket.body | md_lite }}</div>
+      {% endif %}
+    </div>
+
+    <div class="banner mt">
+      {{ ico('clock') }}
+      <span>The resolve clock pauses whenever we are waiting on your reply, so answering
+        our questions quickly is the fastest route to a fix.</span>
+    </div>
+
+    <div class="btns btns--mid mt">
+      {% if wa %}
+      <a class="btn btn--wa" href="{{ wa }}" target="_blank" rel="noopener">
+        {{ ico('whatsapp') }} Add something on WhatsApp</a>
+      {% endif %}
+      <a class="btn btn--ghost" href="{{ url_for('public.support_status') }}">
+        {{ ico('search') }} Check this ticket later</a>
+      <a class="btn btn--ghost" href="{{ url_for('public.home') }}">Back to the site</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+{# The palette is database-driven, so it has to be written into the document rather
+   than living in the stylesheet. This is the one reason the CSP allows inline
+   styles but not inline scripts.
+
+   Included by both the public layout and the portal layout, because a client who
+   signs in should land in the same brand they just left. #}
+<style>
+:root {
+  --primary: {{ theme.primary }};
+  --primary-dark: {{ theme.primary_dark }};
+  --primary-wash: color-mix(in srgb, {{ theme.primary }} 13%, transparent);
+  --primary-glow: color-mix(in srgb, {{ theme.primary }} 42%, transparent);
+  --accent: {{ theme.accent }};
+  --accent-wash: color-mix(in srgb, {{ theme.accent }} 13%, transparent);
+  --warm: {{ theme.warm }};
+  --canvas: {{ theme.canvas }};
+  --surface-1: {{ theme.surface }};
+  --surface-2: color-mix(in srgb, {{ theme.surface }} 72%, {{ theme.canvas }});
+  --line: {{ theme.line }};
+  --line-strong: color-mix(in srgb, {{ theme.line }} 55%, {{ theme.muted }});
+  --fg: color-mix(in srgb, #ffffff 86%, {{ theme.muted }});
+  --fg-strong: #ffffff;
+  --fg-muted: {{ theme.muted }};
+  --fg-faint: color-mix(in srgb, {{ theme.muted }} 62%, {{ theme.canvas }});
+  --radius: {{ theme.radius }}px;
+  --font-display: '{{ theme.font_display }}';
+  --font-body: '{{ theme.font_body }}';
+}
+</style>

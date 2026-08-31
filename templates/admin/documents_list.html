@@ -1,0 +1,117 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge, copy_btn %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Documents &middot; {{ rows | length }} shown</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.clauses_list') }}">
+  {{ ico('shield') }} Clause library</a>
+<a class="b b--sm" href="{{ url_for('admin.document_new') }}">{{ ico('plus') }} New document</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="tabs">
+  <a class="tab {{ 'is-on' if not status and not kind }}"
+     href="{{ url_for('admin.documents_list') }}">Everything</a>
+  {% for code, label in statuses.items() %}
+  <a class="tab {{ 'is-on' if status == code }}"
+     href="{{ url_for('admin.documents_list', status=code) }}">
+    {{ label }}{% if counts.get(code) %} <em>{{ counts[code] }}</em>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="pan">
+  <div class="pan__h">
+    <form class="filters" method="get">
+      <input class="in in--sm" name="q" value="{{ q }}" placeholder="Reference, title or client">
+      <select class="in in--sm" name="kind" data-autofilter aria-label="Kind">
+        <option value="">Any kind</option>
+        {% for code, label in kinds.items() %}
+        <option value="{{ code }}" {{ 'selected' if kind == code }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+      <button class="b b--sm b--ghost" type="submit">{{ ico('search') }} Find</button>
+    </form>
+  </div>
+
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Document</th><th>For</th><th class="num">Value</th>
+            <th>Status</th><th>Valid until</th><th>Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set left = row.valid_until | days_until %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.document_detail', document_id=row.id) }}">
+                {{ row.title | shorten(52) }}</a>
+              <span class="sub mono">{{ row.ref }}</span>
+              <span class="sub">{{ kinds.get(row.kind, row.kind) }}
+                {%- if row.version > 1 %} &middot; version {{ row.version }}{% endif %}</span>
+            </td>
+            <td>
+              {% if row.client_id %}
+              <a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a>
+              {% elif row.lead_id %}
+              <a href="{{ url_for('admin.lead_detail', lead_id=row.lead_id) }}">{{ row.lead_name }}</a>
+              <span class="sub">still a lead</span>
+              {% else %}<span class="muted">nobody yet</span>{% endif %}
+            </td>
+            <td class="num">{{ row.quote_total | cmoney if row.quote_total else '—' }}</td>
+            <td>
+              {% set tones = {'draft': 'mute', 'sent': 'info', 'viewed': 'brand',
+                              'accepted': 'good', 'declined': 'bad', 'expired': 'warn',
+                              'superseded': 'mute'} %}
+              {{ badge(statuses.get(row.status, row.status), tones.get(row.status, '')) }}
+              {% if row.share_views %}
+              <span class="sub">seen {{ row.share_views }} time{{ '' if row.share_views == 1 else 's' }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.valid_until %}
+                {{ row.valid_until | date_fmt('%d %b %y') }}
+                {% if row.status in ('sent', 'viewed') and left is not none %}
+                <span class="sub {{ 'is-bad' if left < 0 else ('is-warn' if left <= 3) }}">
+                  {% if left < 0 %}lapsed{% else %}{{ left }} days left{% endif %}
+                </span>
+                {% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="act">
+              {% if row.share_token %}
+              {{ copy_btn(url_for('public.document_share', token=row.share_token, _external=True),
+                          'Copy the share link') }}
+              {% else %}<span class="sub">not shared</span>{% endif %}
+              <a class="ib" title="PDF" target="_blank" rel="noopener"
+                 href="{{ url_for('admin.document_pdf', document_id=row.id) }}">{{ ico('doc') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('doc') }}
+      <h3>No documents{% if q or kind or status %} match that{% endif %}</h3>
+      <p>A proposal built from a saved quote arrives already priced, scoped and with your
+        clause library attached. Accepting one online moves the lead to won on its own.</p>
+      <a class="b b--ghost" href="{{ url_for('admin.document_new') }}">Draft one</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

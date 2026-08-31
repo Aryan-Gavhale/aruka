@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Activity log &middot; last {{ rows | length }} entries</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="pan">
+  <div class="pan__b">
+    <form class="filters" method="get">
+      <label class="fi fi--3">
+        <span>Entity</span>
+        <select class="in in--sm" name="entity" data-autofilter>
+          <option value="">Everything</option>
+          {% for row in entities %}
+          <option value="{{ row.entity }}" {{ 'selected' if entity == row.entity }}>
+            {{ row.entity | replace('_', ' ') }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="fi fi--3">
+        <span>Action</span>
+        <select class="in in--sm" name="action" data-autofilter>
+          <option value="">Any</option>
+          {% for row in actions %}
+          <option value="{{ row.action }}" {{ 'selected' if action == row.action }}>
+            {{ row.action | replace('_', ' ') }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="fi fi--3 fi--end">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('funnel') }} Filter</button>
+        {% if entity or action %}
+        <a class="b b--sm b--plain" href="{{ url_for('admin.audit') }}">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__h">
+    {{ ico('list') }} <h2>What happened</h2>
+    <p>Written on every create, update, delete, sign-in and export. It is not editable from
+      anywhere in the panel, which is the only reason it is worth reading.</p>
+  </div>
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <table class="tbl">
+      <thead>
+        <tr><th>When</th><th>Who</th><th>What</th><th>Which</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td style="white-space:nowrap">
+            {{ row.created_at | datetime_fmt('%d %b, %H:%M') }}
+            <span class="sub">{{ row.created_at | ago }}</span>
+          </td>
+          <td>
+            {{ row.user_email or 'system' }}
+            {% if row.ip %}<span class="sub mono">{{ row.ip }}</span>{% endif %}
+          </td>
+          <td>
+            {{ badge(row.action | replace('_', ' '),
+                     'bad' if row.action == 'delete' else ('good' if row.action == 'create' else '')) }}
+          </td>
+          <td>
+            {{ row.entity | replace('_', ' ') }}
+            {% if row.label %}<span class="sub">{{ row.label | shorten(44) }}</span>{% endif %}
+          </td>
+          <td>
+            {% set after = row.after_json | from_json %}
+            {% set before = row.before_json | from_json %}
+            {% if after or before %}
+            <details class="diff">
+              <summary>
+                {% if after %}{{ after | length }} field{{ '' if after | length == 1 else 's' }}
+                {% else %}what it was{% endif %}
+              </summary>
+              <table class="tbl tbl--tight">
+                <tbody>
+                  {% for key, value in (after or before).items() %}
+                  {# A null in the JSON means the field was cleared. Printing it as the
+                     word None would read as though someone typed it. #}
+                  {% set was = before.get(key) if before else none %}
+                  <tr>
+                    <th>{{ key | replace('_', ' ') }}</th>
+                    {% if after and before %}
+                    <td class="was">
+                      {{ ('' if was is none else was | string) | shorten(46) or '—' }}
+                    </td>
+                    {% endif %}
+                    <td class="now">
+                      {{ ('' if value is none else value | string) | shorten(46) or '—' }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+            {% else %}
+            <span class="muted">&mdash;</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      {{ ico('list') }}
+      <h3>Nothing logged{% if entity or action %} for that filter{% endif %}</h3>
+      <p>Every change made through the panel lands here.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

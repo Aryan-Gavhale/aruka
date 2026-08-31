@@ -1,0 +1,142 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import crumbs, sec_head, work_card, quote_card,
+   cta_band with context %}
+
+{% set og_type = 'article' %}
+
+{% block progress %}<div class="bar" role="presentation"></div>{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": row.title,
+  "description": row.summary,
+  "datePublished": row.delivered_on or row.created_at,
+  "author": {"@type": "Organization", "name": brand_name},
+  "publisher": {"@type": "Organization", "name": brand_name},
+  "mainEntityOfPage": request.base_url,
+  "image": media_url(row.media_id, absolute=True) if row.media_id else None
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap">
+    {{ crumbs([('Work', url_for('public.work')), (row.client_name or row.title, none)]) }}
+    {% if row.client_name %}<span class="eye r r--none">{{ row.client_name }}</span>{% endif %}
+    <h1 class="r r--none" data-split>{{ row.title }}</h1>
+    <p class="lede r r--none" style="--d:140ms; max-width:58ch">{{ row.summary }}</p>
+
+    <div class="meta mt r r--none" style="--d:220ms">
+      {% if row.sector %}<span>{{ ico('layers') }} {{ row.sector }}</span>{% endif %}
+      {% if row.service_line %}<span>{{ ico('spark') }} {{ row.service_line }}</span>{% endif %}
+      {% if row.delivered_on %}<span>{{ ico('calendar') }} {{ row.delivered_on | date_fmt }}</span>{% endif %}
+      {% if row.live_url %}
+      <span><a class="btn btn--plain" href="{{ row.live_url }}" target="_blank" rel="noopener nofollow">
+        Visit the site {{ ico('external') }}</a></span>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if row.media_id %}
+<section class="sec sec--flush sec--tight">
+  <div class="wrap r r--in">
+    <img src="{{ media_url(row.media_id, 'original') }}"
+         alt="{{ media_alt(row.media_id) or row.title }}"
+         style="border-radius:var(--r-lg); border:1px solid var(--line); width:100%"
+         width="1200" height="750">
+  </div>
+</section>
+{% endif %}
+
+{% if row.metrics %}
+<section class="sec sec--tight">
+  <div class="wrap">
+    <div class="stats r">
+      {% for line in row.metrics | bullets %}
+      {% set bits = line.split('|') %}
+      <div class="stat">
+        <b>{{ bits[0] | trim }}</b>
+        <span>{{ bits[1] | trim if bits | length > 1 else '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="sec">
+  <div class="wrap g-side">
+    <div>
+      {% if row.challenge %}
+      <div class="r">
+        <span class="eye">The problem</span>
+        <h2>What was not working</h2>
+        <div class="prose">{{ row.challenge | md_lite }}</div>
+      </div>
+      {% endif %}
+
+      {% if row.approach %}
+      <div class="r mt">
+        <span class="eye">The work</span>
+        <h2>What we did</h2>
+        <div class="prose">{{ row.approach | md_lite }}</div>
+      </div>
+      {% endif %}
+
+      {% if row.outcome %}
+      <div class="r mt">
+        <span class="eye">The outcome</span>
+        <h2>What changed</h2>
+        <div class="prose">{{ row.outcome | md_lite }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside>
+      <div class="card r r--right">
+        <h4>At a glance</h4>
+        <dl class="dl">
+          {% if row.client_name %}<dt>Client</dt><dd>{{ row.client_name }}</dd>{% endif %}
+          {% if row.sector %}<dt>Sector</dt><dd>{{ row.sector }}</dd>{% endif %}
+          {% if row.service_line %}<dt>Service</dt><dd>{{ row.service_line }}</dd>{% endif %}
+          {% if row.delivered_on %}<dt>Delivered</dt><dd>{{ row.delivered_on | date_fmt }}</dd>{% endif %}
+        </dl>
+        {% if row.stack %}
+        <h4 style="margin-top:22px">Built with</h4>
+        <div class="tags">
+          {% for item in row.stack | as_list %}<span class="tag">{{ item }}</span>{% endfor %}
+        </div>
+        {% endif %}
+        <a class="btn btn--block mt" href="{{ url_for('public.contact',
+           service=row.service_line) }}">Something like this</a>
+      </div>
+    </aside>
+  </div>
+</section>
+
+{% if testimonial %}
+<section class="sec sec--alt sec--tight">
+  <div class="wrap wrap--tight">{{ quote_card(testimonial) }}</div>
+</section>
+{% endif %}
+
+{% if others %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('More work', 'Other projects') }}
+    <div class="work">
+      {% for item in others %}{{ work_card(item) }}{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{{ cta_band() }}
+{% endblock %}

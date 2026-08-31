@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+{% from "admin/_icons.html" import ico %}
+{% from "admin/_fields.html" import fields, csrf %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.' ~ res.key ~ '_list') }}">{{ res.label_plural }}</a>
+  &rsaquo; {{ 'New' if not row else 'Editing' }}
+</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.' ~ res.key ~ '_list') }}">Back to the list</a>
+{% if row and 'slug' in row.keys() and row.slug %}
+  {% if res.key == 'services' %}
+  <a class="b b--sm b--ghost" href="{{ url_for('public.service', slug=row.slug) }}" target="_blank" rel="noopener">{{ ico('external') }} View</a>
+  {% elif res.key == 'case_studies' %}
+  <a class="b b--sm b--ghost" href="{{ url_for('public.case_study', slug=row.slug) }}" target="_blank" rel="noopener">{{ ico('external') }} View</a>
+  {% elif res.key == 'posts' %}
+  <a class="b b--sm b--ghost" href="{{ url_for('public.post', slug=row.slug) }}" target="_blank" rel="noopener">{{ ico('external') }} View</a>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if res.key == 'clauses' %}
+<div class="note note--warn">
+  <b>These are templates, not legal advice.</b> The wording is drafted for an Indian
+  services studio and cites the statutes it relies on, but have a lawyer read it against
+  your own situation before a client signs anything.
+</div>
+{% endif %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+
+  <div class="pan">
+    <div class="pan__h">
+      <h2>{{ res.label }} details</h2>
+      {% if row %}<span class="spacer"></span><span class="hint">#{{ row.id }}</span>{% endif %}
+      {% if res.intro %}<p>{{ res.intro }}</p>{% endif %}
+    </div>
+    <div class="pan__b">
+      <div class="grid">
+        {{ fields(res.fields, row, blob) }}
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save {{ res.label | lower }}</button>
+    <span class="savebar__note">
+      {% if row %}Last change {{ (row.updated_at or row.created_at) | ago if (row.updated_at or row.created_at) else 'not recorded' }}{% else %}Not saved yet{% endif %}
+    </span>
+    {% if row %}
+    <span class="spacer"></span>
+    <a class="b b--ghost" href="{{ url_for('admin.' ~ res.key ~ '_new') }}">{{ ico('plus') }} Add another</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if row and res.deletable %}
+<div class="pan" style="margin-top:18px">
+  <div class="pan__h">
+    <h2>Danger zone</h2>
+    <p>Deleting is permanent. The activity log keeps a record of what was removed.</p>
+  </div>
+  <div class="pan__f">
+    <form method="post" action="{{ url_for('admin.' ~ res.key ~ '_delete', row_id=row.id) }}"
+          data-confirm="Delete “{{ res.label_for(row) }}”? This cannot be undone.">
+      {{ csrf() }}
+      <button class="b b--danger" type="submit">{{ ico('trash') }} Delete this {{ res.label | lower }}</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

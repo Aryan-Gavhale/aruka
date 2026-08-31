@@ -1,0 +1,288 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge, sla_pill, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.tickets_list') }}">Support</a> &rsaquo; {{ ticket.ref }}
+  {% if ticket.is_change_request %}&rsaquo; <span class="muted">change request</span>{% endif %}
+</p>
+{% endblock %}
+
+{% block actions %}
+{% if ticket.contact_phone or (client and client.whatsapp) %}
+<a class="b b--sm b--wa" href="{{ url_for('admin.wa_compose', kind='ticket', target_id=ticket.id) }}">
+  {{ ico('whatsapp') }} WhatsApp
+</a>
+{% endif %}
+{% if ticket.status not in ('resolved', 'closed') %}
+<form method="post" action="{{ url_for('admin.ticket_status', ticket_id=ticket.id) }}" class="inline">
+  {{ csrf() }}
+  <button class="b b--sm b--ghost" name="status" value="waiting_client">{{ ico('clock') }} Waiting on them</button>
+  <button class="b b--sm" name="status" value="resolved">{{ ico('check') }} Resolved</button>
+</form>
+{% elif ticket.status == 'resolved' %}
+<form method="post" action="{{ url_for('admin.ticket_status', ticket_id=ticket.id) }}" class="inline">
+  {{ csrf() }}
+  <button class="b b--sm" name="status" value="closed">{{ ico('check') }} Close it</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Priority', ticket.priority | upper, state.policy.label,
+         'bad' if ticket.priority == 'p1' else ('warn' if ticket.priority == 'p2' else '')) }}
+  {{ kpi('Status', statuses[ticket.status],
+         'reopened ' ~ ticket.reopened_count ~ '×' if ticket.reopened_count else
+         (ticket.created_at | ago) ~ ' old') }}
+  {{ kpi('Response',
+         'met' if state.response.met_at else (state.response.hours_left ~ 'h left'),
+         'due ' ~ (ticket.response_due_at | datetime_fmt('%d %b, %H:%M')),
+         'bad' if state.response.state == 'breached' else
+         ('warn' if state.response.state == 'at_risk' else 'good' if state.response.state == 'met' else '')) }}
+  {{ kpi('Resolve',
+         'paused' if state.resolve.state == 'paused' else
+         ('met' if state.resolve.met_at else (state.resolve.hours_left ~ 'h left')),
+         'due ' ~ (ticket.resolve_due_at | datetime_fmt('%d %b, %H:%M')),
+         'bad' if state.resolve.state == 'breached' else
+         ('warn' if state.resolve.state == 'at_risk' else 'good' if state.resolve.state == 'met' else '')) }}
+</div>
+
+{% if state.state == 'breached' %}
+<div class="note note--bad">
+  This one is past the time you promised. Reply, or move it to waiting-on-client if the
+  ball is genuinely with them - that pauses the resolve clock and the record stays honest.
+</div>
+{% elif state.state == 'at_risk' %}
+<div class="note note--warn">
+  Getting close to the promised time. {{ state.resolve.hours_left }} hours left on the resolve clock.
+</div>
+{% endif %}
+
+<div class="grid">
+
+  <!-- ── thread ───────────────────────────────────────────────────────── -->
+  <div class="pan pan--8">
+    <h2 class="pan__h">{{ ico('chat') }} {{ ticket.subject }}</h2>
+    <div class="pan__b">
+      <ol class="thread">
+        {% for message in thread %}
+        <li class="th__i th__i--{{ message.author_kind }} {{ 'th__i--internal' if message.is_internal }}">
+          <div class="th__m">
+            <strong>{{ message.author_name or (message.author_kind | title) }}</strong>
+            {% if message.is_internal %}{{ badge('Internal', 'mute') }}{% endif %}
+            <span class="sub">{{ message.created_at | datetime_fmt }} &middot; {{ message.created_at | ago }}</span>
+          </div>
+          <div class="th__b">
+            {% for para in message.body | paragraphs %}<p>{{ para }}</p>{% endfor %}
+            {% if message.media_id %}
+            <p><a href="{{ media_url(message.media_id) }}" target="_blank" rel="noopener">
+              {{ ico('image') }} Attachment</a></p>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+
+      <form class="replier" method="post" action="{{ url_for('admin.ticket_reply', ticket_id=ticket.id) }}">
+        {{ csrf() }}
+        <label for="body">Reply</label>
+        <textarea class="in" id="body" name="body" rows="6" required
+                  placeholder="What you found, what you did, and what happens next."></textarea>
+        <div class="row" style="margin-top:10px; gap:10px; align-items:center">
+          <label class="chk"><input type="checkbox" name="is_internal" value="1">
+            <span>Internal note - the client never sees this</span></label>
+          <span class="spacer"></span>
+          <select class="in" name="then_status" style="max-width:210px">
+            <option value="">Leave the status alone</option>
+            {% for code, label in statuses.items() %}
+            <option value="{{ code }}">Then mark {{ label | lower }}</option>
+            {% endfor %}
+          </select>
+          <button class="b" type="submit">{{ ico('check') }} Save reply</button>
+        </div>
+        <span class="hint">Saving puts it on the thread and stops the response clock.
+          Sending it to them is the WhatsApp button at the top - the reply text is carried over.</span>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── right rail ───────────────────────────────────────────────────── -->
+  <div class="pan pan--4">
+    <h2 class="pan__h">{{ ico('user') }} Who raised it</h2>
+    <div class="pan__b">
+      <dl class="dl">
+        {% if client %}
+        <dt>Client</dt>
+        <dd><a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a></dd>
+        {% endif %}
+        {% if project %}
+        <dt>Project</dt>
+        <dd><a href="{{ url_for('admin.project_detail', project_id=project.id) }}">{{ project.name }}</a></dd>
+        {% endif %}
+        <dt>Contact</dt>
+        <dd>{{ ticket.contact_name or 'Not recorded' }}
+          {% if ticket.contact_email %}
+          <span class="sub"><a href="mailto:{{ ticket.contact_email }}">{{ ticket.contact_email }}</a></span>
+          {% endif %}
+          {% if ticket.contact_phone %}<span class="sub">{{ ticket.contact_phone }}</span>{% endif %}
+        </dd>
+        <dt>Came in via</dt><dd>{{ ticket.source | replace('_', ' ') | title }}</dd>
+        <dt>Raised</dt>
+        <dd>{{ ticket.created_at | datetime_fmt }} <span class="sub">{{ ticket.created_at | ago }}</span></dd>
+        {% if ticket.first_response_at %}
+        <dt>First reply</dt><dd>{{ ticket.first_response_at | datetime_fmt }}</dd>
+        {% endif %}
+        {% if ticket.resolved_at %}<dt>Resolved</dt><dd>{{ ticket.resolved_at | datetime_fmt }}</dd>{% endif %}
+        {% if ticket.closed_at %}<dt>Closed</dt><dd>{{ ticket.closed_at | datetime_fmt }}</dd>{% endif %}
+      </dl>
+    </div>
+
+    <h2 class="pan__h">{{ ico('clock') }} Time on this</h2>
+    <div class="pan__b">
+      <div class="kpis kpis--2">
+        {{ kpi('Logged', (minutes // 60) ~ 'h ' ~ (minutes % 60) ~ 'm', 'across ' ~ logs | length ~ ' entr' ~ ('y' if logs | length == 1 else 'ies')) }}
+        {{ kpi('Billable', billable | money, 'at ' ~ (ticket.rate_per_hour | money) ~ '/hour') }}
+      </div>
+
+      {% if logs %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td>{{ log.minutes }}m
+              <span class="sub">{{ log.note | shorten(34) if log.note else log.logged_on | date_fmt('%d %b') }}</span></td>
+            <td>{% if log.is_billable %}{{ badge('Billable', 'good') }}{% endif %}</td>
+            <td class="num">
+              <form method="post" class="inline"
+                    action="{{ url_for('admin.ticket_time_delete', ticket_id=ticket.id, log_id=log.id) }}">
+                {{ csrf() }}
+                <button class="ib" title="Remove">{{ ico('x') }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <form class="row" method="post" action="{{ url_for('admin.ticket_time', ticket_id=ticket.id) }}"
+            style="margin-top:10px; gap:8px; flex-wrap:wrap">
+        {{ csrf() }}
+        <input class="in" name="minutes" type="number" min="1" step="5" placeholder="Minutes"
+               style="max-width:110px" required>
+        <input class="in" name="note" placeholder="What you did">
+        <label class="chk"><input type="checkbox" name="is_billable" value="1"><span>Billable</span></label>
+        <button class="b b--sm" type="submit">Log</button>
+      </form>
+
+      {% if billable > 0 %}
+      <form method="post" action="{{ url_for('admin.ticket_invoice', ticket_id=ticket.id) }}"
+            style="margin-top:10px">
+        {{ csrf() }}
+        <button class="b b--sm b--ghost" type="submit">{{ ico('wallet') }} Invoice the billable time</button>
+      </form>
+      {% endif %}
+    </div>
+
+    <h2 class="pan__h">{{ ico('calc') }} Out of scope?</h2>
+    <div class="pan__b">
+      {% if quote %}
+      <p>Priced as
+        <a href="{{ url_for('admin.quote_detail', quote_id=quote.id) }}">{{ quote.ref }}</a>
+        &middot; {{ quote.total | money }} &middot; {{ quote.status | replace('_', ' ') }}.</p>
+      {% else %}
+      <p class="muted">If this is really new work, price it instead of absorbing it. The quote
+        starts from the time already logged at {{ ticket.rate_per_hour | money }}/hour, and every
+        line stays editable before you send it.</p>
+      <form method="post" action="{{ url_for('admin.ticket_change_request', ticket_id=ticket.id) }}">
+        {{ csrf() }}
+        <button class="b b--sm" type="submit">{{ ico('calc') }} Turn into a quote</button>
+      </form>
+      {% endif %}
+
+      {% if invoices %}
+      <hr class="rule">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for invoice in invoices %}
+          <tr>
+            <td><a href="{{ url_for('admin.invoice_detail', invoice_id=invoice.id) }}">
+              {{ invoice.ref or 'draft' }}</a></td>
+            <td class="num">{{ invoice.total | money }}</td>
+            <td>{{ invoice.status | replace('_', ' ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── edit ─────────────────────────────────────────────────────────── -->
+  <form class="pan pan--12" method="post" action="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}">
+    {{ csrf() }}
+    <h2 class="pan__h">{{ ico('pen') }} Triage</h2>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6"><label for="subject_e">Subject</label>
+          <input class="in" id="subject_e" name="subject" value="{{ ticket.subject }}"></div>
+        <div class="fi fi--3"><label for="category_e">Category</label>
+          <select class="in" id="category_e" name="category">
+            {% for code, label in categories.items() %}
+            <option value="{{ code }}" {{ 'selected' if ticket.category == code }}>{{ label }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--3"><label for="priority_e">Priority</label>
+          <select class="in" id="priority_e" name="priority">
+            {% for code, label in priorities.items() %}
+            <option value="{{ code }}" {{ 'selected' if ticket.priority == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">Changing this restarts both clocks from now.</span></div>
+
+        <div class="fi fi--3"><label for="assignee_user_id">Owner</label>
+          <select class="in" id="assignee_user_id" name="assignee_user_id">
+            <option value="">Unassigned</option>
+            {% for row in users %}
+            <option value="{{ row.id }}" {{ 'selected' if ticket.assignee_user_id == row.id }}>{{ row.name }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--3"><label for="project_e">Project</label>
+          <select class="in" id="project_e" name="project_id">
+            <option value="">None</option>
+            {% for row in projects %}
+            <option value="{{ row.id }}" {{ 'selected' if ticket.project_id == row.id }}>
+              {{ row.ref }} - {{ row.name }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="fi fi--3"><label for="rate_per_hour">Rate per hour</label>
+          <div class="wrapin"><span class="fix">&#8377;</span>
+            <input class="in" id="rate_per_hour" name="rate_per_hour" type="number" step="1"
+                   value="{{ ticket.rate_per_hour }}"></div></div>
+        <div class="fi fi--3 fi--check">
+          <label class="chk"><input type="checkbox" name="is_change_request" value="1"
+                 {{ 'checked' if ticket.is_change_request }}><span>Change request, not a fault</span></label>
+        </div>
+      </div>
+    </div>
+    <div class="pan__f">
+      <button class="b" type="submit">{{ ico('check') }} Save</button>
+      <a class="b b--ghost" href="{{ url_for('admin.tickets_list') }}">Back to the queue</a>
+      <span class="spacer"></span>
+      {% if is_owner() %}
+      <button class="b b--sm b--danger" type="submit" form="ticket-delete"
+              data-confirm="Delete {{ ticket.ref }} and its whole thread? Closing it keeps the record.">
+        {{ ico('trash') }} Delete
+      </button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<form id="ticket-delete" method="post"
+      action="{{ url_for('admin.ticket_delete', ticket_id=ticket.id) }}" hidden>{{ csrf() }}</form>
+
+{% endblock %}

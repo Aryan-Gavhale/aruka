@@ -1,0 +1,111 @@
+{% extends "admin/base.html" %}
+{% from "admin/_icons.html" import ico %}
+{% from "admin/_fields.html" import csrf, badge %}
+
+{% block actions %}
+{% if res.searchable %}
+<form class="search" method="get">
+  {{ ico('search') }}
+  <input class="in" type="search" name="q" value="{{ search }}" placeholder="Search {{ res.label_plural | lower }}">
+</form>
+{% endif %}
+<a class="b" href="{{ url_for('admin.' ~ res.key ~ '_new') }}">{{ ico('plus') }} New {{ res.label | lower }}</a>
+{% endblock %}
+
+{% block content %}
+{% if res.intro %}<div class="note note--plain">{{ res.intro }}</div>{% endif %}
+
+<div class="pan">
+  <div class="pan__h">
+    <h2>{{ rows | length }} {{ res.label_plural | lower if rows | length != 1 else res.label | lower }}</h2>
+    {% if res.sortable %}<p>Drag the handle to reorder. The website uses this order.</p>{% endif %}
+  </div>
+
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl" {% if res.sortable %}data-reorder="{{ url_for('admin.' ~ res.key ~ '_reorder') }}"{% endif %}>
+        <thead>
+          <tr>
+            {% if res.sortable %}<th></th>{% endif %}
+            {% for key, label in res.list_columns %}
+            <th class="{{ 'num' if key.startswith(('price', 'amount', 'cost', 'unit_price', 'value', 'response', 'resolve')) }}">{{ label }}</th>
+            {% endfor %}
+            {% if res.publishable or res.activatable %}<th>{{ 'Live' if res.publishable else 'On' }}</th>{% endif %}
+            <th class="act">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set toggled = row[res.toggle_column()] if (res.publishable or res.activatable) else 1 %}
+          <tr data-id="{{ row.id }}" class="{{ 'is-draft' if (res.publishable or res.activatable) and not toggled }}">
+            {% if res.sortable %}<td class="drag" title="Drag or use the arrow keys">{{ ico('drag') }}</td>{% endif %}
+
+            {% for key, label in res.list_columns %}
+            <td class="{{ 'w-thumb' if key.endswith('media_id') }}{{ ' num' if key.startswith(('price', 'amount', 'cost', 'unit_price', 'value', 'response', 'resolve')) }}">
+              {% if key.endswith('media_id') %}
+                {% set m = media_row(row[key]) %}
+                {% if m %}<img class="tbl__thumb" src="{{ media_url(m, 'thumb') }}" alt="">{% else %}<span class="hint">&mdash;</span>{% endif %}
+              {% elif loop.first %}
+                <a class="rowlink" href="{{ url_for('admin.' ~ res.key ~ '_edit', row_id=row.id) }}">{{ row[key] or '#' ~ row.id }}</a>
+                {% if 'slug' in row.keys() and row.slug %}<span class="sub mono">/{{ row.slug }}</span>{% endif %}
+              {% elif key.startswith(('price', 'amount', 'cost', 'unit_price', 'value')) %}
+                {{ row[key] | money if row[key] else '—' }}
+              {% elif key == 'category' and res.key == 'addons' %}
+                {{ ADDON_CATEGORIES.get(row[key], row[key]) }}
+              {% elif key == 'is_featured' %}
+                {% if row[key] %}{{ badge('featured', 'brand') }}{% else %}<span class="hint">&mdash;</span>{% endif %}
+              {% elif key == 'is_recurring' %}
+                {% if row[key] %}{{ badge(row.recurring_period or 'recurring', 'info') }}{% else %}<span class="hint">one-off</span>{% endif %}
+              {% elif key == 'rating' %}
+                {{ '★' * (row[key] or 0) }}<span class="hint">{{ '☆' * (5 - (row[key] or 0)) }}</span>
+              {% elif key == 'version' %}
+                v{{ row[key] }}
+              {% else %}
+                {{ row[key] if row[key] not in (none, '') else '—' }}
+              {% endif %}
+            </td>
+            {% endfor %}
+
+            {% if res.publishable or res.activatable %}
+            <td>
+              <label class="sw" style="padding:0">
+                <input type="checkbox" {{ 'checked' if toggled }}
+                       data-toggle-url="{{ url_for('admin.' ~ res.key ~ '_toggle', row_id=row.id) }}"
+                       aria-label="Toggle {{ res.label_for(row) }}">
+                <span class="sw__t"></span>
+              </label>
+            </td>
+            {% endif %}
+
+            <td class="act">
+              <a class="b b--sm b--ghost" href="{{ url_for('admin.' ~ res.key ~ '_edit', row_id=row.id) }}">Edit</a>
+              {% if res.deletable %}
+              <form method="post" style="display:inline"
+                    action="{{ url_for('admin.' ~ res.key ~ '_delete', row_id=row.id) }}"
+                    data-confirm="Delete “{{ res.label_for(row) }}”? This cannot be undone.">
+                {{ csrf() }}
+                <button class="b b--sm b--danger" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico(res.icon) }}
+      <h3>{% if search %}Nothing matched “{{ search }}”{% else %}No {{ res.label_plural | lower }} yet{% endif %}</h3>
+      <p>{% if search %}Try a shorter search.{% else %}{{ res.intro or 'Add the first one and it appears straight away.' }}{% endif %}</p>
+      {% if search %}
+      <a class="b b--ghost" href="{{ url_for('admin.' ~ res.key ~ '_list') }}">Clear the search</a>
+      {% else %}
+      <a class="b" href="{{ url_for('admin.' ~ res.key ~ '_new') }}">{{ ico('plus') }} New {{ res.label | lower }}</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

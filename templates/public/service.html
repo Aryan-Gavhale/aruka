@@ -1,0 +1,178 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import crumbs, sec_head, plan_card, work_card, quote_card,
+   cta_band, marquee_band with context %}
+
+{% set og_type = 'article' %}
+
+{% block jsonld %}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": row.name,
+  "serviceType": row.name,
+  "description": row.summary,
+  "provider": {"@type": "ProfessionalService", "name": brand_name,
+               "url": request.url_root.rstrip('/')},
+  "areaServed": "IN",
+  "offers": {
+    "@type": "Offer",
+    "price": row.price_from or None,
+    "priceCurrency": "INR",
+    "url": request.base_url
+  } if row.price_from else None
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap">
+    {{ crumbs([('Services', url_for('public.services')), (row.name, none)]) }}
+    <div class="g-side">
+      <div>
+        <span class="eye r r--none">{{ row.tagline or 'Service' }}</span>
+        <h1 class="r r--none" data-split>{{ row.name }}</h1>
+        <p class="lede r r--none" style="--d:140ms">{{ row.summary }}</p>
+        <div class="btns mt r r--none" style="--d:220ms">
+          <a class="btn btn--lg" href="{{ url_for('public.contact', service=row.name) }}"
+             data-magnet="5">Enquire about {{ row.name | lower }} {{ ico('arrow') }}</a>
+          {% if calculator_on %}
+          <a class="btn btn--ghost btn--lg" href="{{ url_for('public.pricing_page') }}">
+            {{ ico('calc') }} Get a price</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <aside class="card r r--right">
+        <span class="card__i">{{ ico(row.icon or 'spark') }}</span>
+        <dl class="dl">
+          {% if row.price_from %}<dt>Starts at</dt><dd>{{ row.price_from | money }}</dd>{% endif %}
+          {% if row.timeline %}<dt>Timeline</dt><dd>{{ row.timeline }}</dd>{% endif %}
+          {% if row.ideal_for %}<dt>Ideal for</dt><dd>{{ row.ideal_for }}</dd>{% endif %}
+          <dt>Support</dt><dd>Included after launch</dd>
+        </dl>
+      </aside>
+    </div>
+  </div>
+</section>
+
+{% if row.media_id %}
+<section class="sec sec--flush sec--tight">
+  <div class="wrap r r--in">
+    <img src="{{ media_url(row.media_id, 'original') }}"
+         alt="{{ media_alt(row.media_id) or row.name }}"
+         style="border-radius:var(--r-lg); border:1px solid var(--line); width:100%"
+         width="1200" height="700">
+  </div>
+</section>
+{% endif %}
+
+{% if row.body %}
+<section class="sec">
+  <div class="wrap g-side">
+    <div class="prose r">{{ row.body | md_lite }}</div>
+
+    <aside>
+      {% if row.features or row.deliverables %}
+      <div class="card r r--right">
+        {% if row.features %}
+        <h4>What is included</h4>
+        <ul class="ticks">
+          {% for line in row.features | bullets %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if row.deliverables %}
+        <h4 style="margin-top:24px">What you get handed</h4>
+        <ul class="ticks">
+          {% for line in row.deliverables | bullets %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+{% elif row.features %}
+<section class="sec">
+  <div class="wrap grid g2">
+    <div class="r">
+      <h2>What is included</h2>
+      <ul class="ticks">
+        {% for line in row.features | bullets %}<li>{{ line }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% if row.deliverables %}
+    <div class="r r--right">
+      <h2>What you get handed</h2>
+      <ul class="ticks">
+        {% for line in row.deliverables | bullets %}<li>{{ line }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{{ marquee_band() }}
+
+{% if packages %}
+<section class="sec sec--alt">
+  <div class="wrap">
+    {{ sec_head('Pricing', 'Where ' ~ row.name | lower ~ ' usually lands',
+                'Fixed-scope packages, and everything outside them quoted from the same
+                 rate card.', mid=true) }}
+    <div class="plans">
+      {% for pkg in packages %}
+      {{ plan_card(pkg, cta_url=url_for('public.contact', package=pkg.slug, service=row.name)) }}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if work %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('Proof', row.name ~ ', in the wild') }}
+    <div class="work">
+      {% for item in work %}{{ work_card(item) }}{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if testimonials %}
+<section class="sec {{ 'sec--alt' if not work }}">
+  <div class="wrap">
+    {{ sec_head('In their words', 'Clients on the record', mid=true) }}
+    <div class="grid g3">
+      {% for item in testimonials %}{{ quote_card(item) }}{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if others %}
+<section class="sec sec--tight">
+  <div class="wrap">
+    {{ sec_head('', 'The other things we do') }}
+    <div class="grid g4">
+      {% for item in others %}
+      <a class="card r" href="{{ url_for('public.service', slug=item.slug) }}">
+        <span class="card__i">{{ ico(item.icon or 'spark') }}</span>
+        <h3>{{ item.name }}</h3>
+        <p>{{ item.tagline }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{{ cta_band('Ready to talk about ' ~ row.name | lower ~ '?',
+            'Tell us what you have now and what it needs to do. We will come back with a
+             scope and a number, not a discovery workshop.') }}
+{% endblock %}

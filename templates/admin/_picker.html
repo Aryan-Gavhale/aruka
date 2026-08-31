@@ -1,0 +1,22 @@
+{# The inside of the media picker modal. Fetched, so no layout and no scripts. #}
+<div class="picker__top">
+  <input class="in" id="picker-search" type="search" value="{{ search }}"
+         placeholder="Search by name or alt text" autocomplete="off">
+</div>
+
+{% if rows %}
+<div class="pgrid">
+  {% for row in rows %}
+  <button class="pitem" type="button" data-id="{{ row.id }}"
+          data-thumb="{{ media_url(row, 'thumb') }}" data-alt="{{ row.alt or row.title or '' }}">
+    <img src="{{ media_url(row, 'thumb') }}" alt="" loading="lazy">
+    <span class="pitem__m">{{ row.alt or row.title or row.filename }}</span>
+  </button>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted" style="padding:18px 4px">
+  {% if search %}Nothing matches “{{ search }}”.{% else %}The library is empty.{% endif %}
+  Upload images in <a href="{{ url_for('admin.media') }}">Media</a>.
+</p>
+{% endif %}

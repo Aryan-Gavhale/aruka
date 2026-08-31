@@ -1,0 +1,132 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.wa_templates_list') }}">{{ ico('note') }} Templates</a>
+{% if is_owner() %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.wa_bulk') }}">{{ ico('users') }} Bulk</a>
+{% endif %}
+{% endblock %}
+
+{% block crumb %}
+<p class="crumb">Sending through <b>{{ provider.label }}</b></p>
+{% endblock %}
+
+{% block content %}
+
+<form class="filters" method="get" action="{{ url_for('admin.wa_log') }}">
+  <input class="in" type="search" name="q" value="{{ q }}" placeholder="Name, number or text">
+  <select class="in" name="channel">
+    <option value="whatsapp" {{ 'selected' if channel == 'whatsapp' }}>WhatsApp</option>
+    <option value="email" {{ 'selected' if channel == 'email' }}>Email</option>
+  </select>
+  <select class="in" name="status">
+    <option value="">Any status</option>
+    {% for code, label in labels.items() %}
+    <option value="{{ code }}" {{ 'selected' if status == code }}>
+      {{ label }}{% if counts.get(code) %} ({{ counts[code] }}){% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  <select class="in" name="direction">
+    <option value="">Both ways</option>
+    <option value="out" {{ 'selected' if direction == 'out' }}>Sent by us</option>
+    <option value="in" {{ 'selected' if direction == 'in' }}>Received</option>
+  </select>
+  <button class="b b--sm" type="submit">Filter</button>
+  {% if q or status or direction %}
+  <a class="b b--sm b--ghost" href="{{ url_for('admin.wa_log', channel=channel) }}">Clear</a>
+  {% endif %}
+</form>
+
+{% if counts.get('ready') and not provider.sends_itself %}
+<div class="note note--warn">
+  <b>{{ counts['ready'] }} message(s) are prepared but unconfirmed.</b>
+  On click-to-chat a message sits at "ready to send" until you say whether it went out.
+  Open one and mark it either way so the log stays worth reading.
+</div>
+{% endif %}
+
+<div class="tbl-wrap">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>To</th>
+        <th>Message</th>
+        <th>About</th>
+        <th>Status</th>
+        <th class="act"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for message in rows %}
+      <tr class="{{ 'row--in' if message.direction == 'in' }}">
+        <td>
+          <span title="{{ message.created_at }}">{{ message.created_at | ago }}</span>
+          {% if message.direction == 'in' %}<span class="sub">inbound</span>{% endif %}
+        </td>
+        <td>
+          <span class="strong">{{ message.to_name or message.lead_name or message.client_name or '-' }}</span>
+          {% if message.to_number %}<span class="sub">+{{ message.to_number | wa }}</span>{% endif %}
+          {% if message.to_email %}<span class="sub">{{ message.to_email }}</span>{% endif %}
+        </td>
+        <td class="cell--wide">
+          {% if message.subject %}<span class="strong">{{ message.subject | shorten(60) }}</span>{% endif %}
+          <span class="sub sub--body">{{ message.body | shorten(150) }}</span>
+          {% if message.template_name %}<span class="sub">via {{ message.template_name }}</span>{% endif %}
+        </td>
+        <td>
+          {% if message.lead_ref %}
+          <a href="{{ url_for('admin.lead_detail', lead_id=message.lead_id) }}">{{ message.lead_ref }}</a>
+          {% endif %}
+          {% if message.invoice_ref %}
+          <a href="{{ url_for('admin.invoice_detail', invoice_id=message.invoice_id) }}">{{ message.invoice_ref }}</a>
+          {% endif %}
+          {% if message.ticket_ref %}
+          <a href="{{ url_for('admin.ticket_detail', ticket_id=message.ticket_id) }}">{{ message.ticket_ref }}</a>
+          {% endif %}
+          {% if message.client_name and not message.lead_ref %}
+          <span class="sub">{{ message.client_name }}</span>
+          {% endif %}
+          {% if message.batch_id %}<span class="sub">batch {{ message.batch_id }}</span>{% endif %}
+        </td>
+        <td>
+          {% set tones = {'delivered': 'good', 'read': 'good', 'sent': 'info', 'received': 'brand',
+                          'ready': 'warn', 'queued': 'mute', 'failed': 'bad'} %}
+          {{ badge(labels.get(message.status, message.status), tones.get(message.status, '')) }}
+          {% if message.error %}<span class="sub is-bad">{{ message.error | shorten(70) }}</span>{% endif %}
+        </td>
+        <td class="act">
+          {% if message.status in ('ready', 'queued') and message.direction == 'out' %}
+          <a class="ib" title="Open and confirm"
+             href="{{ url_for('admin.wa_handoff', message_id=message.id) }}">{{ ico('external') }}</a>
+          {% endif %}
+          {% if is_owner() %}
+          <form method="post" action="{{ url_for('admin.wa_log_delete', message_id=message.id) }}"
+                data-confirm="Remove this log entry? The message itself is unaffected.">
+            {{ csrf() }}
+            <button class="ib" type="submit" title="Remove from the log">{{ ico('trash') }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+
+      {% if not rows %}
+      <tr><td colspan="6" class="empty">
+        {% if q or status or direction %}Nothing matches that filter.
+        {% else %}No {{ channel }} messages yet. Every send from a lead, invoice, ticket or
+        document lands here.{% endif %}
+      </td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if rows | length >= 400 %}
+<p class="hint">Showing the newest 400.</p>
+{% endif %}
+
+{% endblock %}

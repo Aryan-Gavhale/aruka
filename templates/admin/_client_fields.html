@@ -1,0 +1,130 @@
+{# The client form, shared by "new" and the details panel on the client page. #}
+{% from "admin/_icons.html" import ico %}
+{% set c = client %}
+
+<div class="pan">
+  <div class="pan__h">{{ ico('briefcase') }} <h2>Who they are</h2></div>
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--6">
+        <label for="name">Name <em>*</em></label>
+        <input class="in" id="name" name="name" value="{{ c.name if c }}" required>
+        <span class="hint">What you call them day to day.</span>
+      </div>
+      <div class="fi fi--6">
+        <label for="legal_name">Legal name</label>
+        <input class="in" id="legal_name" name="legal_name" value="{{ c.legal_name if c }}">
+        <span class="hint">As registered. This is what goes on the invoice when it differs.</span>
+      </div>
+
+      <div class="fi fi--4">
+        <label for="contact_name">Main contact</label>
+        <input class="in" id="contact_name" name="contact_name" value="{{ c.contact_name if c }}">
+      </div>
+      <div class="fi fi--4">
+        <label for="email">Email</label>
+        <input class="in" id="email" name="email" type="email" value="{{ c.email if c }}">
+        <span class="hint">Also how they sign in to the client portal.</span>
+      </div>
+      <div class="fi fi--4">
+        <label for="phone">Phone</label>
+        <input class="in" id="phone" name="phone" type="tel" value="{{ c.phone if c }}">
+      </div>
+
+      <div class="fi fi--4">
+        <label for="whatsapp">WhatsApp</label>
+        <input class="in" id="whatsapp" name="whatsapp" type="tel" value="{{ c.whatsapp if c }}">
+        <span class="hint">Leave blank to use the phone number.</span>
+      </div>
+      <div class="fi fi--4">
+        <label for="website">Website</label>
+        <input class="in" id="website" name="website" type="url" value="{{ c.website if c }}">
+      </div>
+      <div class="fi fi--4">
+        <label for="sector">Sector</label>
+        <input class="in" id="sector" name="sector" value="{{ c.sector if c }}"
+               placeholder="Textiles, clinic, logistics…">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__h">
+    {{ ico('wallet') }} <h2>Billing</h2>
+    <p>The state decides the tax split once you are GST registered: same state as yours is
+      CGST plus SGST, a different one is IGST. Getting it wrong is the commonest GST mistake,
+      so it is a list rather than a text box.</p>
+  </div>
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--12">
+        <label for="billing_address">Billing address</label>
+        <textarea class="in" id="billing_address" name="billing_address" rows="3">{{ c.billing_address if c }}</textarea>
+      </div>
+      <div class="fi fi--4">
+        <label for="city">City</label>
+        <input class="in" id="city" name="city" value="{{ c.city if c }}">
+      </div>
+      <div class="fi fi--5">
+        <label for="state_code">State</label>
+        <select class="in" id="state_code" name="state_code">
+          <option value="">Not set</option>
+          {% for code, name in states %}
+          <option value="{{ code }}" {{ 'selected' if c and c.state_code == code }}>
+            {{ code }} &middot; {{ name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--3">
+        <label for="pincode">PIN code</label>
+        <input class="in" id="pincode" name="pincode" value="{{ c.pincode if c }}" maxlength="10">
+      </div>
+
+      <div class="fi fi--6">
+        <label for="gstin">GSTIN</label>
+        <input class="in" id="gstin" name="gstin" value="{{ c.gstin if c }}" maxlength="20"
+               placeholder="27AAAAA0000A1Z5">
+        <span class="hint">Needed on a tax invoice if they want to claim the input credit.</span>
+      </div>
+      <div class="fi fi--6">
+        <label for="pan">PAN</label>
+        <input class="in" id="pan" name="pan" value="{{ c.pan if c }}" maxlength="12">
+        <span class="hint">A company client deducts TDS and will ask for yours; keep theirs
+          here for the certificate.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--12">
+        <label for="notes">Notes</label>
+        <textarea class="in" id="notes" name="notes" rows="3"
+                  placeholder="How they like to be contacted, who signs off, anything worth remembering.">{{ c.notes if c }}</textarea>
+      </div>
+      <div class="fi fi--6">
+        <label class="sw">
+          <input type="checkbox" id="is_active" name="is_active" value="1"
+                 {{ 'checked' if not c or c.is_active }}>
+          <span class="sw__t"></span>
+          <span class="sw__l">Active
+            <span>Inactive clients drop out of the pickers but keep every invoice and project.</span>
+          </span>
+        </label>
+      </div>
+      <div class="fi fi--6">
+        <label class="sw">
+          <input type="checkbox" id="opt_out" name="opt_out" value="1" {{ 'checked' if c and c.opt_out }}>
+          <span class="sw__t"></span>
+          <span class="sw__l">Do not message
+            <span>Honoured everywhere: the WhatsApp buttons stop offering to send.</span>
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+</div>

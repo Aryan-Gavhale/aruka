@@ -1,0 +1,36 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{% block content %}
+<div class="pcard">
+  <span class="eye">{{ ico('lock') }} Client access</span>
+  <h1>Sign in to your account</h1>
+  <p class="lede">No password to remember. Type the email address we send your invoices
+    to and we will send back a {{ ttl }}-minute code.</p>
+
+  <form class="f" method="post" action="{{ url_for('portal.login') }}" data-once>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="fi">
+      <label for="f-email">Your email <em>*</em></label>
+      <input class="in" id="f-email" name="email" type="email" required autofocus
+             autocomplete="email" placeholder="you@company.in">
+      <span class="fi__h">Use the address on your invoices. If someone else on your team
+        needs access, ask us to add them.</span>
+    </div>
+    <button class="btn btn--lg btn--block" type="submit" data-busy="Sending&hellip;">
+      Send me a code {{ ico('arrow') }}</button>
+  </form>
+
+  <p class="small mt">Already have a code?
+    <a href="{{ url_for('portal.verify') }}">Enter it here</a>.</p>
+
+  <div class="pcard__f">
+    <p class="small">Here to check a support ticket without signing in?
+      <a href="{{ url_for('public.support_status') }}">Look it up by reference</a>.</p>
+    {% if support_email %}
+    <p class="small">Stuck? Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+      and we will sort it out by hand.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

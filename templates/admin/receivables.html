@@ -1,0 +1,141 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, bar, badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Receivables &middot; {{ aging.count }} open invoice{{ '' if aging.count == 1 else 's' }}</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.invoices_list', status='open') }}">
+  {{ ico('wallet') }} All open invoices</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Owed to you', aging.total | cmoney,
+         'Across ' ~ aging.count ~ ' invoice' ~ ('' if aging.count == 1 else 's'),
+         'bad' if aging.total else 'good') }}
+  {% for bucket in aging.buckets[1:] %}
+  {% if loop.index0 < 3 %}
+  {{ kpi(bucket.label, bucket.total | cmoney,
+         bucket.count ~ ' invoice' ~ ('' if bucket.count == 1 else 's'),
+         'bad' if loop.index0 >= 1 and bucket.total else ('warn' if bucket.total else '')) }}
+  {% endif %}
+  {% endfor %}
+</div>
+
+{% if not aging.total %}
+<div class="note note--good">
+  <b>Nothing outstanding.</b> Every issued invoice has been settled. This is the screen you
+  want to be boring.
+</div>
+{% endif %}
+
+<div class="grid">
+  <!-- ── the ladder ───────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('warn') }} <h2>Reminders to send</h2>
+      <p>One row per invoice that has earned its next reminder. Sending opens the composer with
+        the right wording already chosen for how late it is.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if reminders %}
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Invoice</th><th>Client</th><th>Late by</th><th class="num">Balance</th>
+              <th>Stage</th><th class="act">Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for row in reminders %}
+            {% set invoice = row.invoice %}
+            {% set late = -(invoice.due_on | days_until or 0) %}
+            <tr class="{{ 'is-flagged' if late >= 21 }}">
+              <td>
+                <a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=invoice.id) }}">{{ invoice.ref }}</a>
+                <span class="sub">due {{ invoice.due_on | date_fmt('%d %b %Y') }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('admin.client_detail', client_id=invoice.client_id) }}">{{ invoice.client_name }}</a>
+              </td>
+              <td>
+                {% if late > 0 %}<b class="is-bad">{{ late }} days</b>
+                {% else %}<span class="muted">not yet due</span>{% endif %}
+              </td>
+              <td class="num strong">{{ invoice.balance | money }}</td>
+              <td>{{ badge(row.label, 'bad' if late >= 21 else 'warn') }}</td>
+              <td class="act">
+                {{ wa_button(invoice.client_whatsapp, 'invoice', invoice.id) }}
+                <a class="ib" title="PDF" target="_blank" rel="noopener"
+                   href="{{ url_for('admin.invoice_pdf', invoice_id=invoice.id) }}">{{ ico('doc') }}</a>
+                <form method="post" action="{{ url_for('admin.invoice_reminded', invoice_id=invoice.id) }}">
+                  {{ csrf() }}
+                  <input type="hidden" name="stage" value="{{ row.stage }}">
+                  <button class="ib" type="submit" title="Log that I reminded them">{{ ico('check') }}</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted" style="padding:18px">
+        Nothing is due a reminder. Either everything is paid, or nothing has passed its due
+        date yet.
+      </p>
+      {% endif %}
+    </div>
+
+    <div class="pan__f">
+      <h3 class="sub-h">The ladder</h3>
+      <p class="hint">Tone hardens with time rather than at random. Three weeks late is where
+        the wording says work pauses, because that is the point at which continuing to work is
+        a decision you are making about someone else's cash flow.</p>
+      <ol class="ladder ladder--wide">
+        {% for days, code, label in ladder %}
+        <li><span>{{ label }}</span><em>{{ days }} days</em></li>
+        {% endfor %}
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── the buckets ──────────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <div class="pan__h">{{ ico('chart') }} <h2>How old the money is</h2></div>
+    <div class="pan__b">
+      {% set peak = aging.buckets | map(attribute='total') | max %}
+      <div class="bars">
+        {% for bucket in aging.buckets %}
+        {{ bar(bucket.label, bucket.total, peak, bucket.total | cmoney,
+               'bad' if loop.index0 >= 3 else ('warn' if loop.index0 == 2 else '')) }}
+        {% endfor %}
+      </div>
+    </div>
+
+    {% for bucket in aging.buckets if bucket.invoices %}
+    <div class="pan__h"><h2>{{ bucket.label }}</h2>
+      <span class="spacer"></span><span class="sub">{{ bucket.total | cmoney }}</span></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for invoice in bucket.invoices %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=invoice.id) }}">{{ invoice.ref }}</a>
+              <span class="sub">{{ invoice.client_name }}</span>
+            </td>
+            <td class="num">{{ invoice.balance | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+
+{% endblock %}

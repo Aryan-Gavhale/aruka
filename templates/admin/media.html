@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Media &middot; {{ rows | length }} image{{ '' if rows | length == 1 else 's' }}</p>
+{% endblock %}
+
+{% block actions %}
+<form class="filters filters--inline" method="get">
+  <input class="in in--sm" type="search" name="q" value="{{ search }}" placeholder="Search alt text">
+  <button class="b b--sm b--ghost" type="submit">{{ ico('search') }}</button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="pan">
+  <div class="pan__b">
+    <form id="drop" class="drop" method="post" action="{{ url_for('admin.media_upload') }}"
+          enctype="multipart/form-data">
+      {{ csrf() }}
+      {{ ico('image') }}
+      <p><b>Drop images here</b>, or <label class="link" for="drop-input">choose files</label>.</p>
+      <input id="drop-input" type="file" name="files" accept="image/*,image/svg+xml" multiple hidden>
+      <span class="hint">JPEG, PNG, WebP, GIF or SVG. Each one is resized into a thumbnail and a
+        display copy on upload, so the public pages never serve a 4&nbsp;MB photograph.</span>
+      <span class="drop__status" id="drop-status"></span>
+      <noscript><button class="b b--sm" type="submit">Upload</button></noscript>
+    </form>
+  </div>
+</div>
+
+{% if rows %}
+<div class="mgrid">
+  {% for row in rows %}
+  <figure class="mcard {{ 'is-flagged' if request.args.get('used') == row.id | string }}">
+    <a class="mcard__img" href="{{ media_url(row, 'full') }}" target="_blank" rel="noopener">
+      <img src="{{ media_url(row, 'thumb') }}" alt="{{ row.alt }}" loading="lazy">
+    </a>
+    <figcaption class="mcard__b">
+      <form method="post" action="{{ url_for('admin.media_edit', media_id=row.id) }}">
+        {{ csrf() }}
+        <input class="in in--sm" name="alt" value="{{ row.alt }}" placeholder="Alt text"
+               aria-label="Alt text for image {{ row.id }}">
+        <input class="in in--sm" name="title" value="{{ row.title }}" placeholder="Title"
+               aria-label="Title for image {{ row.id }}">
+        <input class="in in--sm" name="credit" value="{{ row.credit }}" placeholder="Credit"
+               aria-label="Credit for image {{ row.id }}">
+        <div class="mcard__f">
+          <span class="sub mono">#{{ row.id }} &middot; {{ row.width }}&times;{{ row.height }}
+            &middot; {{ (row.bytes / 1024) | round | int }}&nbsp;KB</span>
+          <span class="spacer"></span>
+          <button class="b b--sm b--plain" type="submit">{{ ico('save') }}</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('admin.media_delete', media_id=row.id) }}"
+            data-confirm="Delete this image? Anything still pointing at it will lose its picture.">
+        {{ csrf() }}
+        {% if request.args.get('used') == row.id | string %}
+        <input type="hidden" name="force" value="1">
+        {% endif %}
+        <button class="b b--sm b--danger" type="submit">{{ ico('trash') }} Delete</button>
+      </form>
+    </figcaption>
+  </figure>
+  {% endfor %}
+</div>
+{% else %}
+<div class="pan">
+  <div class="empty">
+    {{ ico('image') }}
+    <h3>{% if search %}Nothing matches “{{ search }}”{% else %}No images yet{% endif %}</h3>
+    <p>Your logo, a signature PNG, the UPI QR code and case-study screenshots all live here.</p>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

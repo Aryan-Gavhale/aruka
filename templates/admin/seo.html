@@ -1,0 +1,137 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">SEO checklist &middot; {{ rows | length }} published page{{ '' if rows | length == 1 else 's' }}</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.settings_view', tab='seo') }}">
+  {{ ico('cog') }} SEO settings</a>
+<a class="b b--sm b--ghost" target="_blank" rel="noopener"
+   href="{{ url_for('public.sitemap') }}">{{ ico('external') }} sitemap.xml</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Overall', overall ~ '%', 'Across every published page',
+         'good' if overall >= 80 else ('warn' if overall >= 50 else 'bad')) }}
+  {{ kpi('Pages checked', rows | length, 'Pages, services, work and insights') }}
+  {{ kpi('Indexing', 'Allowed' if indexable else 'Blocked',
+         'robots.txt and the meta robots tag',
+         'good' if indexable else 'bad') }}
+</div>
+
+{% if not indexable %}
+<div class="note note--bad">
+  <b>The site is telling search engines to stay away.</b> That is right while you are building
+  and wrong the day you launch. The switch is in
+  <a href="{{ url_for('admin.settings_view', tab='seo') }}">SEO settings</a>.
+</div>
+{% endif %}
+
+<div class="note note--info">
+  These are the mechanical checks - the ones that are either done or not. They are worth
+  finishing because they are cheap, and they are not the same thing as ranking. Nothing here
+  measures whether the writing is any good, and that is what actually decides it.
+</div>
+
+{% if weakest %}
+<div class="pan">
+  <div class="pan__h">
+    {{ ico('warn') }} <h2>Worth an hour of your time</h2>
+    <p>The six weakest pages. Fixing a title and a description takes two minutes each.</p>
+  </div>
+  <div class="pan__b pan__b--flush">
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for row in weakest %}
+        <tr>
+          <td>
+            <a class="rowlink" href="{{ row.edit_url }}">{{ row.label }}</a>
+            <span class="sub">{{ row.kind }} &middot; <span class="mono">{{ row.url }}</span></span>
+          </td>
+          <td style="min-width:120px">
+            <span class="prog">
+              <span class="prog__f {{ 'prog__f--bad' if row.pct < 50 }}" style="width: {{ row.pct }}%"></span>
+            </span>
+          </td>
+          <td class="num">{{ row.passed }} of {{ row.total }}</td>
+          <td>
+            {% for label, ok in row.checks if not ok %}
+            <span class="sub">{{ label }}</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="pan">
+  <div class="pan__h">{{ ico('list') }} <h2>Everything published</h2></div>
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr><th>Page</th><th>Score</th>
+            {% for label, _ok in rows[0].checks %}<th class="rot">{{ label }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ row.edit_url }}">{{ row.label | shorten(40) }}</a>
+              <span class="sub">{{ row.kind }} &middot;
+                <a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.url }}</a></span>
+            </td>
+            <td>
+              {{ badge(row.pct ~ '%',
+                       'good' if row.pct >= 80 else ('warn' if row.pct >= 50 else 'bad')) }}
+            </td>
+            {% for label, ok in row.checks %}
+            <td class="tick" title="{{ label }}">
+              {% if ok %}<span class="tick--y">{{ ico('check') }}</span>
+              {% else %}<span class="tick--n">{{ ico('x') }}</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('search') }}
+      <h3>Nothing is published yet</h3>
+      <p>Publish a page, a service or a case study and it appears here with its score.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pan__f">
+    <h3 class="sub-h">What the columns mean</h3>
+    <dl class="dl dl--tight">
+      <dt>Title 25-60</dt>
+      <dd>Google truncates around 60 characters and under 25 usually means the page is not
+        saying what it is.</dd>
+      <dt>Description 80-165</dt>
+      <dd>Not a ranking factor. It is the sentence that decides whether anyone clicks, which
+        matters more.</dd>
+      <dt>300 words</dt>
+      <dd>A rough floor, not a target. A page with less than that rarely answers the question
+        someone searched for.</dd>
+      <dt>Social share image</dt>
+      <dd>What appears when the link is pasted into WhatsApp. Without it your link looks
+        broken, which is most of the first impression.</dd>
+    </dl>
+  </div>
+</div>
+
+{% endblock %}

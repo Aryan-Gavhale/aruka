@@ -1,0 +1,243 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.quotes_list') }}">Quotes</a> &rsaquo; New
+  {% if lead %}&rsaquo; for <a href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>{% endif %}
+</p>
+{% endblock %}
+
+{% block content %}
+
+<form class="calc" method="post" data-calc data-preview-url="{{ preview_url }}"
+      action="{{ url_for('admin.quote_new') }}">
+  {{ csrf() }}
+  {% if lead %}<input type="hidden" name="lead_id" value="{{ lead.id }}">{% endif %}
+  {% if client %}<input type="hidden" name="client_id" value="{{ client.id }}">{% endif %}
+
+  <div class="calc__main">
+
+    <!-- ── package ─────────────────────────────────────────────────────── -->
+    <section class="pan">
+      <h2 class="pan__h">{{ ico('gift') }} Start from a package</h2>
+      <div class="pan__b">
+        <div class="picks">
+          {% for pkg in packages %}
+          <label class="pick-card">
+            <input type="radio" name="package_id" value="{{ pkg.id }}"
+                   data-calc-input {{ 'checked' if loop.first }}>
+            <span class="pick-card__b">
+              <span class="pick-card__t">{{ pkg.name }}</span>
+              <span class="pick-card__p">
+                {% if pkg.is_from_price %}from {% endif %}{{ pkg.price | money }}
+              </span>
+              {% if pkg.tagline %}<span class="pick-card__s">{{ pkg.tagline }}</span>{% endif %}
+              <span class="pick-card__m">
+                {{ pkg.pages_included }} pages &middot; {{ pkg.delivery_days }} days
+                {% if pkg.recurring_yearly %} &middot; {{ pkg.recurring_yearly | money }}/yr after{% endif %}
+              </span>
+              {% if is_owner() and pkg.internal_cost %}
+              <span class="pick-card__c">costs you {{ pkg.internal_cost | money }}</span>
+              {% endif %}
+            </span>
+          </label>
+          {% endfor %}
+
+          <label class="pick-card">
+            <input type="radio" name="package_id" value="" data-calc-input>
+            <span class="pick-card__b">
+              <span class="pick-card__t">No package</span>
+              <span class="pick-card__p">&mdash;</span>
+              <span class="pick-card__s">Build the whole thing from add-ons.</span>
+            </span>
+          </label>
+        </div>
+
+        {% if not packages %}
+        <p class="muted">No packages set up.
+          <a href="{{ url_for('admin.packages_new') }}">Add one</a> before quoting.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- ── scope ───────────────────────────────────────────────────────── -->
+    <section class="pan">
+      <h2 class="pan__h">{{ ico('sliders') }} Shape it</h2>
+      <div class="pan__b">
+        <div class="grid">
+          <div class="fi fi--4">
+            <label for="pages">Total pages they want</label>
+            <input class="in" id="pages" name="pages" type="number" min="0" step="1"
+                   value="0" data-calc-input>
+            <span class="hint">Anything past what the package includes is charged per page.
+              Zero means stick to the package.</span>
+          </div>
+
+          <div class="fi fi--4">
+            <label for="complexity">Complexity</label>
+            <select class="in" id="complexity" name="complexity" data-calc-input>
+              <option value="1">Standard - brochure-style, no integrations</option>
+              <option value="1.25">A bit more - custom forms, one integration</option>
+              <option value="1.5">Involved - logins, dashboards, a design system</option>
+              <option value="2">Heavy - custom logic, several integrations</option>
+              <option value="2.5">Bespoke - it is really a product</option>
+            </select>
+            <span class="hint">Scales the build, not the discount.</span>
+          </div>
+
+          <div class="fi fi--4">
+            <label>Timeline and terms</label>
+            <label class="sw sw--tight">
+              <input type="checkbox" name="rush" value="1" data-calc-input>
+              <span class="sw__t"></span>
+              <span class="sw__l">Rush delivery
+                <span>+{{ rules.rush.value | round | int if rules.rush else S('pricing.rush_pct') }}%,
+                  compressed timeline</span></span>
+            </label>
+            <label class="sw sw--tight">
+              <input type="checkbox" name="annual_prepay" value="1" data-calc-input>
+              <span class="sw__t"></span>
+              <span class="sw__l">Paying the whole thing up front
+                <span>{{ rules.annual_prepay.value | round | int if rules.annual_prepay else S('pricing.annual_prepay_discount_pct') }}% off</span></span>
+            </label>
+            <label class="sw sw--tight">
+              <input type="checkbox" name="referral" value="1" data-calc-input>
+              <span class="sw__t"></span>
+              <span class="sw__l">Referred by a client
+                <span>{{ rules.referral.value | round | int if rules.referral else S('pricing.referral_discount_pct') }}% off</span></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── add-ons ─────────────────────────────────────────────────────── -->
+    {% for category, label, rows in addon_groups %}
+    <section class="pan">
+      <h2 class="pan__h">{{ ico('plus') }} {{ label }}</h2>
+      <div class="pan__b">
+        <div class="addons">
+          {% for addon in rows %}
+          <div class="addon">
+            {% if addon.is_quantity %}
+            <label class="addon__l" for="addon_{{ addon.id }}">
+              <span class="addon__t">{{ addon.name }}</span>
+              {% if addon.help %}<span class="addon__h">{{ addon.help }}</span>{% endif %}
+            </label>
+            <span class="addon__q">
+              <input class="in in--sm" id="addon_{{ addon.id }}" name="addon_{{ addon.id }}"
+                     type="number" min="0" max="{{ addon.max_qty }}" step="1" value="0"
+                     data-calc-input>
+              <span class="addon__u">{{ addon.unit }}</span>
+            </span>
+            {% else %}
+            <label class="sw sw--tight addon__sw">
+              <input type="checkbox" id="addon_{{ addon.id }}" name="addon_{{ addon.id }}"
+                     value="1" data-calc-input>
+              <span class="sw__t"></span>
+              <span class="sw__l">{{ addon.name }}
+                {% if addon.help %}<span>{{ addon.help }}</span>{% endif %}</span>
+            </label>
+            {% endif %}
+            <span class="addon__p">
+              {{ addon.unit_price | money }}{% if addon.unit != 'each' %}/{{ addon.unit }}{% endif %}
+              {% if addon.is_recurring %}
+              <span class="addon__r">per {{ addon.recurring_period | replace('_', ' ') }}</span>
+              {% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+
+    <!-- ── the record ──────────────────────────────────────────────────── -->
+    <section class="pan">
+      <h2 class="pan__h">{{ ico('note') }} Label it</h2>
+      <div class="pan__b">
+        <div class="grid">
+          <div class="fi fi--6">
+            <label for="title">Quote title</label>
+            <input class="in" id="title" name="title"
+                   placeholder="{{ (lead.company or lead.name) ~ ' - website' if lead else 'Website build' }}">
+          </div>
+          {% if not lead and not client %}
+          <div class="fi fi--6">
+            <label for="client_id">Attach to a client</label>
+            <select class="in" id="client_id" name="client_id">
+              <option value="">Not attached</option>
+              {% for row in clients %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="fi fi--12">
+            <label for="notes">Notes for the proposal</label>
+            <textarea class="in" id="notes" name="notes" rows="3"
+                      placeholder="Anything the client should read alongside the numbers."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── sticky total ──────────────────────────────────────────────────── -->
+  <aside class="calc__side">
+    <div class="quote" data-calc-out>
+      <h2 class="quote__h">{{ ico('calc') }} The number</h2>
+
+      <ul class="quote__lines" data-calc-lines></ul>
+
+      <dl class="quote__sums">
+        <dt>Subtotal</dt><dd data-calc-subtotal>&#8377;0</dd>
+        <dt data-calc-surcharge-row hidden>Rush</dt><dd data-calc-surcharge hidden>&#8377;0</dd>
+        <dt data-calc-discount-row hidden>Discount</dt><dd data-calc-discount hidden>&#8377;0</dd>
+        <dt data-calc-tax-row hidden>GST <span data-calc-tax-rate></span></dt>
+        <dd data-calc-tax hidden>&#8377;0</dd>
+      </dl>
+
+      <div class="quote__total">
+        <span>Total</span>
+        <b data-calc-total>&#8377;0</b>
+      </div>
+
+      <p class="quote__rec" data-calc-recurring-row hidden>
+        Then <b data-calc-recurring>&#8377;0</b> a year from year two.
+      </p>
+
+      <p class="quote__days">
+        Delivery in about <b data-calc-days>14</b> working days.
+      </p>
+
+      {% if is_owner() %}
+      <div class="quote__margin" data-calc-margin-box>
+        <span class="lbl">Only you see this</span>
+        <dl class="quote__sums">
+          <dt>Costs you</dt><dd data-calc-cost>&#8377;0</dd>
+          <dt>Margin</dt><dd data-calc-margin>&#8377;0</dd>
+          <dt>Margin</dt><dd data-calc-margin-pct>0%</dd>
+        </dl>
+      </div>
+      {% endif %}
+
+      <div class="quote__ms">
+        <span class="lbl">Payment schedule</span>
+        <ul data-calc-milestones></ul>
+      </div>
+
+      <button class="b b--lg" type="submit">{{ ico('check') }} Save this quote</button>
+      <p class="hint">
+        {% if not gst_on() %}
+        No GST is added - you are in bill-of-supply mode. Switch that in Settings the day you
+        register, and this calculator starts adding it everywhere.
+        {% else %}
+        GST at {{ S('gst.default_rate') }}% is included above.
+        {% endif %}
+      </p>
+    </div>
+  </aside>
+</form>
+
+{% endblock %}

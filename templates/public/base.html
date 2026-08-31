@@ -1,0 +1,244 @@
+{% from "public/_icons.html" import ico %}
+<!doctype html>
+<html lang="en" class="no-js{{ ' no-anim' if not theme.animations }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>{{ meta.title if meta else brand_name }}</title>
+<meta name="description" content="{{ meta.description if meta else S('seo.default_description') }}">
+<link rel="canonical" href="{{ meta.canonical if meta else request.base_url }}">
+
+{% if not indexable %}
+<meta name="robots" content="noindex, nofollow">
+{% else %}
+<meta name="robots" content="index, follow, max-image-preview:large">
+{% endif %}
+
+<meta property="og:site_name" content="{{ brand_name }}">
+<meta property="og:title" content="{{ meta.title if meta else brand_name }}">
+<meta property="og:description" content="{{ meta.description if meta else S('seo.default_description') }}">
+<meta property="og:type" content="{{ og_type | default('website') }}">
+<meta property="og:url" content="{{ meta.canonical if meta else request.base_url }}">
+{% if meta and meta.og_media_id %}
+<meta property="og:image" content="{{ media_url(meta.og_media_id, absolute=True) }}">
+<meta name="twitter:card" content="summary_large_image">
+{% else %}
+<meta name="twitter:card" content="summary">
+{% endif %}
+<meta name="theme-color" content="{{ theme.canvas }}">
+
+{% if S('seo.search_console_tag') %}
+<meta name="google-site-verification" content="{{ S('seo.search_console_tag') }}">
+{% endif %}
+
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+{% if theme.font_url %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="{{ theme.font_url }}">
+{% endif %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+
+{% include '_theme.html' %}
+
+{% block head %}{% endblock %}
+
+{# One organisation block sitewide, plus whatever the page adds of its own. #}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  "name": S('brand.legal_name') or brand_name,
+  "alternateName": brand_name,
+  "description": S('seo.default_description'),
+  "url": request.url_root.rstrip('/'),
+  "email": contact.email,
+  "telephone": contact.phone,
+  "address": {
+    "@type": "PostalAddress",
+    "addressLocality": S('brand.city'),
+    "addressRegion": S('brand.state'),
+    "addressCountry": "IN"
+  },
+  "areaServed": "IN",
+  "priceRange": "\u20b9\u20b9",
+  "foundingDate": S('brand.established'),
+  "sameAs": [social.instagram, social.linkedin, social.x, social.github, social.youtube]
+             | select | list
+} | tojson }}
+</script>
+{% block jsonld %}{% endblock %}
+</head>
+
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+{% block progress %}{% endblock %}
+
+<header class="hdr">
+  <div class="wrap hdr__in">
+    <a class="logo" href="{{ url_for('public.home') }}" aria-label="{{ brand_name }}, home">
+      {% if S('brand.logo_media_id') %}
+      <img src="{{ media_url(S('brand.logo_media_id')) }}" alt="{{ brand_name }}" width="150" height="38">
+      {% else %}
+      <span class="logo__mark" aria-hidden="true">{{ brand_name[:1] | upper }}</span>
+      <span>
+        <span class="logo__t">{{ brand_name }}</span>
+        {% if S('brand.tagline') %}<span class="logo__s">{{ S('brand.short') or 'Studio' }}</span>{% endif %}
+      </span>
+      {% endif %}
+    </a>
+
+    <nav class="nav" aria-label="Main">
+      {% for item in nav_items %}
+      <a href="{{ item.url }}"
+         class="{{ 'is-here' if nav_here and (item.url | trim('/')) == nav_here }}">{{ item.label }}</a>
+      {% endfor %}
+    </nav>
+
+    <div class="hdr__cta">
+      {% if calculator_on %}
+      <a class="btn btn--ghost btn--sm" href="{{ url_for('public.pricing_page') }}">
+        {{ ico('calc') }} Get a price</a>
+      {% endif %}
+      <a class="btn btn--sm" href="{{ url_for('public.contact') }}" data-magnet="4">
+        Start a project</a>
+      <button class="burger" type="button" aria-expanded="false" aria-controls="drawer"
+              aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="drawer" id="drawer">
+  {% for item in nav_items %}
+  <a href="{{ item.url }}">{{ item.label }}</a>
+  {% endfor %}
+  <a href="{{ url_for('public.support') }}">Support<span>Raise a ticket</span></a>
+  <a href="{{ url_for('portal.login') }}">Client login<span>Invoices and progress</span></a>
+  <div class="btns">
+    <a class="btn btn--block" href="{{ url_for('public.contact') }}">Start a project</a>
+    {% if wa_link %}
+    <a class="btn btn--wa btn--block" href="{{ wa_link }}" target="_blank" rel="noopener">
+      {{ ico('whatsapp') }} WhatsApp us</a>
+    {% endif %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flashes" role="status" aria-live="polite">
+  {% for category, message in messages %}
+  <div class="flash flash--{{ category }}">
+    {{ ico('check' if category == 'ok' else 'warn') }}
+    <span>{{ message }}</span>
+    <button type="button" aria-label="Dismiss">{{ ico('x') }}</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<main id="main">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr__g">
+      <div>
+        <a class="logo" href="{{ url_for('public.home') }}">
+          {% if S('brand.logo_media_id') %}
+          <img src="{{ media_url(S('brand.logo_media_id')) }}" alt="{{ brand_name }}" width="150" height="38">
+          {% else %}
+          <span class="logo__mark" aria-hidden="true">{{ brand_name[:1] | upper }}</span>
+          <span class="logo__t">{{ brand_name }}</span>
+          {% endif %}
+        </a>
+        <p class="ftr__b">{{ S('brand.promise') }}</p>
+        {% if social.values() | select | list %}
+        <div class="socials">
+          {% for key, label in [('instagram', 'Instagram'), ('linkedin', 'LinkedIn'),
+                                ('x', 'X'), ('github', 'GitHub'), ('youtube', 'YouTube')] %}
+          {% if social.get(key) %}
+          <a href="{{ social[key] }}" target="_blank" rel="noopener noreferrer"
+             aria-label="{{ label }}">{{ ico('social_' ~ key) }}</a>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div>
+        <h4>What we do</h4>
+        <ul>
+          {% for row in footer_services %}
+          <li><a href="{{ url_for('public.service', slug=row.slug) }}">{{ row.name }}</a></li>
+          {% endfor %}
+          <li><a href="{{ url_for('public.services') }}">Everything</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Studio</h4>
+        <ul>
+          {% for item in footer_items %}
+          <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+          {% endfor %}
+          <li><a href="{{ url_for('public.work') }}">Work</a></li>
+          <li><a href="{{ url_for('public.insights') }}">Insights</a></li>
+          <li><a href="{{ url_for('public.support') }}">Support</a></li>
+          <li><a href="{{ url_for('portal.login') }}">Client login</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Talk to us</h4>
+        <ul>
+          {% if contact.email %}
+          <li><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></li>
+          {% endif %}
+          {% if contact.phone_display %}
+          <li><a href="tel:{{ contact.phone | replace(' ', '') }}">{{ contact.phone_display }}</a></li>
+          {% endif %}
+          {% if wa_link %}
+          <li><a href="{{ wa_link }}" target="_blank" rel="noopener">WhatsApp</a></li>
+          {% endif %}
+          {% if contact.address %}<li class="small">{{ contact.address }}</li>{% endif %}
+          {% if contact.hours_note %}<li class="small">{{ contact.hours_note }}</li>{% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <div class="ftr__end">
+      <span>&copy; {{ today[:4] }} {{ S('brand.legal_name') or brand_name }}.
+        {% if S('gst.gstin') %}GSTIN {{ S('gst.gstin') }}.{% endif %}</span>
+      <nav aria-label="Legal">
+        {% for row in legal_links %}
+        <a href="{{ url_for('public.legal', slug=row.slug) }}">{{ row.title }}</a>
+        {% endfor %}
+      </nav>
+    </div>
+  </div>
+</footer>
+
+{% if wa_link %}
+<a class="wafab" href="{{ wa_link }}" target="_blank" rel="noopener"
+   aria-label="Message us on WhatsApp">{{ ico('whatsapp') }}</a>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/site.js') }}" defer nonce="{{ csp_nonce() }}"></script>
+{% if S('seo.ga4_id') and indexable %}
+<script async src="https://www.googletagmanager.com/gtag/js?id={{ S('seo.ga4_id') }}"
+        nonce="{{ csp_nonce() }}"></script>
+<script nonce="{{ csp_nonce() }}">
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '{{ S("seo.ga4_id") }}');
+</script>
+{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,295 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, invoice_badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.clients_list') }}">Clients</a> &rsaquo;
+  {{ client.name }} <span class="mono">{{ client.ref }}</span></p>
+{% endblock %}
+
+{% block actions %}
+{{ wa_button(client.whatsapp, 'client', client.id, client.opt_out, 'WhatsApp') }}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.project_new', client_id=client.id) }}">
+  {{ ico('rocket') }} New project</a>
+<a class="b b--sm" href="{{ url_for('admin.invoice_new', client_id=client.id) }}">
+  {{ ico('wallet') }} Raise an invoice</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Invoiced', balance.invoiced | cmoney, 'Issued, excluding drafts') }}
+  {{ kpi('Collected', balance.paid | cmoney, 'Including TDS deducted', 'good') }}
+  {{ kpi('Owing', balance.balance | cmoney,
+         'Across open invoices', 'bad' if balance.balance else '') }}
+  {{ kpi('Open tickets', tickets_open | length, 'Support in flight',
+         'warn' if tickets_open else '') }}
+</div>
+
+{% if client.opt_out %}
+<div class="note note--warn">
+  This client has asked not to be messaged. The WhatsApp buttons are disabled everywhere for
+  them, and bulk runs skip them.
+</div>
+{% endif %}
+
+{% if not client.state_code and gst_on() %}
+<div class="note note--warn">
+  No state is set, so the tax split on their next invoice cannot be worked out. Set it below
+  before issuing anything.
+</div>
+{% endif %}
+
+<div class="grid">
+
+  <!-- ── projects ─────────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('rocket') }} <h2>Projects</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--plain" href="{{ url_for('admin.project_new', client_id=client.id) }}">
+        {{ ico('plus') }} New</a>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if projects %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in projects %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.project_detail', project_id=row.id) }}">{{ row.name }}</a>
+              <span class="sub mono">{{ row.ref }}</span>
+            </td>
+            <td>{{ badge(row.status, 'good' if row.status == 'active' else '') }}</td>
+            <td class="num">{{ row.value | cmoney }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">No projects yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__h">
+      {{ ico('wallet') }} <h2>Invoices</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--plain" href="{{ url_for('admin.invoices_list', client=client.id) }}">All</a>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if invoices %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in invoices %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.issued_on | date_fmt('%d %b %Y') }}</span>
+            </td>
+            <td>{{ invoice_badge(row.status) }}</td>
+            <td class="num">{{ row.total | money }}</td>
+            <td class="num {{ 'is-bad' if row.balance }}">
+              {% if row.balance %}{{ row.balance | money }} due{% else %}<span class="muted">settled</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing invoiced yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__h">{{ ico('receipt') }} <h2>Payments received</h2></div>
+    <div class="pan__b pan__b--flush">
+      {% if paymentz %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in paymentz %}
+          <tr class="{{ 'is-void' if row.voided_at }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.payment_detail', payment_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.paid_on | date_fmt('%d %b %Y') }} &middot; {{ row.method }}
+                {%- if row.invoice_ref %} &middot; {{ row.invoice_ref }}{% endif %}</span>
+            </td>
+            <td class="num">
+              {{ row.amount | money }}
+              {% if row.voided_at %}{{ badge('void', 'mute') }}{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">No payments recorded.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── the side rail ────────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <div class="pan__h">{{ ico('users') }} <h2>People</h2></div>
+    <div class="pan__b">
+      {% if contacts %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in contacts %}
+          <tr>
+            <td>
+              {{ row.name }}{% if row.is_primary %} {{ badge('main', 'brand') }}{% endif %}
+              <span class="sub">{{ row.role or '' }}{% if row.email %} &middot; {{ row.email }}{% endif %}</span>
+            </td>
+            <td class="act">
+              {% if row.portal_access %}<span class="ib" title="Can sign in to the portal">{{ ico('key') }}</span>{% endif %}
+              <form method="post"
+                    action="{{ url_for('admin.client_contact_delete', client_id=client.id, contact_id=row.id) }}"
+                    data-confirm="Remove {{ row.name }}?">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">Only the main contact on the client record.</p>
+      {% endif %}
+
+      <details class="adder">
+        <summary>{{ ico('plus') }} Add someone</summary>
+        <form method="post" action="{{ url_for('admin.client_contact_add', client_id=client.id) }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--6"><label for="c-name">Name</label>
+              <input class="in in--sm" id="c-name" name="name" required></div>
+            <div class="fi fi--6"><label for="c-role">Role</label>
+              <input class="in in--sm" id="c-role" name="role" placeholder="Owner, marketing…"></div>
+            <div class="fi fi--6"><label for="c-email">Email</label>
+              <input class="in in--sm" id="c-email" name="email" type="email"></div>
+            <div class="fi fi--6"><label for="c-phone">Phone</label>
+              <input class="in in--sm" id="c-phone" name="phone" type="tel"></div>
+            <div class="fi fi--6">
+              <label class="sw sw--tight"><input type="checkbox" name="is_primary" value="1">
+                <span class="sw__t"></span><span class="sw__l">Main contact</span></label>
+            </div>
+            <div class="fi fi--6">
+              <label class="sw sw--tight"><input type="checkbox" name="portal_access" value="1" checked>
+                <span class="sw__t"></span><span class="sw__l">Portal access</span></label>
+            </div>
+          </div>
+          <button class="b b--sm" type="submit">Add</button>
+        </form>
+      </details>
+    </div>
+
+    {% if recurring %}
+    <div class="pan__h">{{ ico('refresh') }} <h2>Renews</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in recurring %}
+          <tr class="{{ 'is-warn' if (row.next_due_on | days_until) < 21 }}">
+            <td>{{ row.label }}<span class="sub">{{ row.period }}</span></td>
+            <td class="num">{{ row.amount | cmoney }}
+              <span class="sub">{{ row.next_due_on | date_fmt('%d %b %Y') }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if assets %}
+    <div class="pan__h">{{ ico('key') }} <h2>Domains and hosting</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--plain" href="{{ url_for('admin.vault') }}">Vault</a>
+    </div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in assets %}
+          <tr class="{{ 'is-warn' if row.expires_on and (row.expires_on | days_until) < 30 }}">
+            <td>{{ row.label }}<span class="sub">{{ row.kind }}</span></td>
+            <td class="num">
+              {% if row.expires_on %}{{ row.expires_on | date_fmt('%d %b %Y') }}
+              {% else %}<span class="muted">no expiry</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if tickets_open %}
+    <div class="pan__h">{{ ico('life') }} <h2>Open tickets</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in tickets_open %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.ticket_detail', ticket_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.subject | shorten(44) }}</span></td>
+            <td class="num">{{ badge(row.priority | upper, 'bad' if row.priority == 'p1' else '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if documents %}
+    <div class="pan__h">{{ ico('doc') }} <h2>Documents</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in documents %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.document_detail', document_id=row.id) }}">{{ row.title }}</a>
+              <span class="sub mono">{{ row.ref }}</span></td>
+            <td class="num">{{ badge(row.status, 'good' if row.status == 'accepted' else '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div class="pan__f">
+      <dl class="dl dl--tight">
+        <dt>Supply</dt>
+        <dd>{{ 'Inter-state (IGST)' if supply == 'inter' else 'Intra-state (CGST + SGST)' }}
+          <span class="sub">yours is {{ our_state or 'not set' }}, theirs
+            {{ client.state_code or 'not set' }}</span></dd>
+        <dt>Client since</dt><dd>{{ client.created_at | date_fmt }}</dd>
+      </dl>
+    </div>
+  </section>
+</div>
+
+<!-- ── the editable record ─────────────────────────────────────────────────── -->
+<form method="post" data-guard>
+  {{ csrf() }}
+  {% include "admin/_client_fields.html" %}
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save</button>
+    <a class="b b--ghost" href="{{ url_for('admin.clients_list') }}">Back to clients</a>
+    {% if is_owner() %}
+    <span class="spacer"></span>
+    <button class="b b--sm b--danger" type="submit" form="client-delete"
+            data-confirm="Delete {{ client.name }}? Only possible while nothing has been issued to them.">
+      {{ ico('trash') }} Delete
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+{% if is_owner() %}
+<form id="client-delete" method="post" hidden
+      action="{{ url_for('admin.client_delete', client_id=client.id) }}">
+  {{ csrf() }}
+</form>
+{% endif %}
+
+{% endblock %}

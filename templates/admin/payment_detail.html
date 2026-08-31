@@ -1,0 +1,89 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.payments_list') }}">Payments</a> &rsaquo;
+  <span class="mono">{{ payment.ref }}</span></p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" target="_blank" rel="noopener"
+   href="{{ url_for('admin.receipt_pdf', payment_id=payment.id) }}">{{ ico('doc') }} Receipt PDF</a>
+{{ wa_button(client.whatsapp, 'client', client.id, client.opt_out, 'Send it') }}
+{% endblock %}
+
+{% block content %}
+
+{% if payment.voided_at %}
+<div class="note note--bad">
+  <b>Voided {{ payment.voided_at | date_fmt }}.</b>
+  {{ payment.void_reason or 'No reason recorded.' }}
+  The receipt stays here rather than disappearing, because a receipt that was sent to a client
+  cannot be un-sent.
+</div>
+{% endif %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Received', payment.amount | money, payment.method,
+         '' if payment.voided_at else 'good') }}
+  {{ kpi('TDS deducted', payment.tds_amount | money,
+         'Credited against your PAN' if payment.tds_amount else 'None') }}
+  {{ kpi('Paid on', payment.paid_on | date_fmt('%d %b %Y'),
+         payment.reference or 'no reference given') }}
+</div>
+
+<div class="grid">
+  <section class="pan pan--7">
+    <div class="pan__h">{{ ico('receipt') }} <h2>The receipt</h2></div>
+    <div class="pan__b">
+      <dl class="dl">
+        <dt>Number</dt><dd class="mono">{{ payment.ref }}</dd>
+        <dt>From</dt>
+        <dd><a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a></dd>
+        <dt>Against</dt>
+        <dd>
+          {% if invoice %}
+          <a href="{{ url_for('admin.invoice_detail', invoice_id=invoice.id) }}">{{ invoice.ref }}</a>
+          &middot; {{ invoice.total | money }},
+          {% if invoice.balance %}{{ invoice.balance | money }} still due
+          {% else %}now settled{% endif %}
+          {% else %}
+          {{ badge('advance', 'info') }} not tied to an invoice yet
+          {% endif %}
+        </dd>
+        <dt>In words</dt><dd>{{ payment.amount | in_words }}</dd>
+        {% if payment.notes %}<dt>Note</dt><dd>{{ payment.notes }}</dd>{% endif %}
+        <dt>Recorded</dt><dd>{{ payment.created_at | datetime_fmt }} by {{ payment.recorded_by or 'you' }}</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="pan pan--5">
+    {% if can('money') and not payment.voided_at %}
+    <div class="pan__h">{{ ico('warn') }} <h2>Void it</h2></div>
+    <div class="pan__b">
+      <p class="hint">For a bounced cheque, a reversed transfer, or a receipt recorded against
+        the wrong invoice. The balance goes back on the invoice and the receipt stays visible,
+        marked void.</p>
+      <form method="post" action="{{ url_for('admin.payment_void', payment_id=payment.id) }}"
+            data-confirm="Void {{ payment.ref }}? The invoice balance goes back up.">
+        {{ csrf() }}
+        <div class="fi fi--12">
+          <label for="reason">Reason</label>
+          <input class="in in--sm" id="reason" name="reason" required
+                 placeholder="Cheque returned unpaid">
+        </div>
+        <button class="b b--sm b--danger" type="submit">{{ ico('trash') }} Void this receipt</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="pan__f">
+      <p class="hint">Receipt numbers run in their own financial-year series, separate from
+        invoices, so neither has a gap when the other is cancelled.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

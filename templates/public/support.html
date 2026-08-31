@@ -1,0 +1,154 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import crumbs, sec_head, faq_list, faq_jsonld, form_guard,
+   field with context %}
+
+{% block jsonld %}{{ faq_jsonld(faqs) }}{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap">
+    {{ crumbs([('Support', none)]) }}
+    <span class="eye r r--none">Support</span>
+    <h1 class="r r--none" data-split>Something not working?</h1>
+    <p class="lede r r--none" style="--d:130ms; max-width:54ch">{{ intro }}</p>
+    <div class="btns mt r r--none" style="--d:200ms">
+      <a class="btn btn--ghost" href="{{ url_for('public.support_status') }}">
+        {{ ico('search') }} Check an existing ticket</a>
+      <a class="btn btn--ghost" href="{{ url_for('portal.login') }}">Client login</a>
+    </div>
+  </div>
+</section>
+
+{# The response times, on the page, before anyone asks. A support promise nobody
+   can read is not a promise. #}
+<section class="sec sec--flush sec--tight">
+  <div class="wrap">
+    <div class="sla r">
+      {% for key, policy in policies.items() %}
+      <div class="sla__i">
+        <span class="sla__p">{{ priorities[key] }}</span>
+        <b>{{ policy.response_hours | int }}h</b>
+        <span>first reply &middot; {{ policy.resolve_hours | int }}h to resolve</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="small mt">
+      Clock runs from when the ticket is raised.
+      {% if not S('sla.business_hours_only') %}Hours are counted round the clock, not only in
+      office hours.{% else %}Counted in working hours: {{ contact.hours_note }}{% endif %}
+      Waiting on your reply pauses the resolve clock.
+    </p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap g-side">
+    <form class="f f2" method="post" action="{{ url_for('public.support_new') }}"
+          data-timed data-once>
+      {{ form_guard() }}
+      <div class="fi fi--wide">
+        <h2 style="margin-bottom:4px">Raise a ticket</h2>
+        <p class="small">You will get a reference straight away. No account needed.</p>
+      </div>
+
+      {{ field('contact_name', 'Your name', 'text', placeholder='Priya Sharma') }}
+      {{ field('contact_email', 'Email', 'email', required=true, placeholder='you@company.in',
+               help='We match this to your account, so use the address we invoice.') }}
+      {{ field('contact_phone', 'Phone or WhatsApp', 'tel', placeholder='+91 90000 00000') }}
+
+      <div class="fi">
+        <label for="f-category">What kind of problem?</label>
+        <select class="in" id="f-category" name="category">
+          {% for key, label in categories.items() %}
+          <option value="{{ key }}" {{ 'selected' if key == 'bug' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fi fi--wide">
+        <label for="f-priority">How urgent is it?</label>
+        <select class="in" id="f-priority" name="priority">
+          {% for key, label in priorities.items() %}
+          <option value="{{ key }}" {{ 'selected' if key == 'p3' }}>
+            {{ label }} &mdash; first reply within
+            {{ policies[key].response_hours | int }} hours</option>
+          {% endfor %}
+        </select>
+        <span class="fi__h">Be honest. Marking everything P1 does not make anything
+          faster, and it hides the thing that really is down.</span>
+      </div>
+
+      {{ field('subject', 'One-line summary', 'text', required=true,
+               placeholder='Contact form on the website is not sending email',
+               span='fi--wide') }}
+
+      <div class="fi fi--wide">
+        <label for="f-body">What happened? <em>*</em></label>
+        <textarea class="in" id="f-body" name="body" rows="7" required
+                  placeholder="What you were doing, what you expected, what happened instead, and when it started."></textarea>
+        <span class="fi__h">The exact error text and the time it started are the two most
+          useful things you can give us.</span>
+      </div>
+
+      <div class="fi fi--wide">
+        <button class="btn btn--lg" type="submit" data-busy="Raising&hellip;" data-magnet="4">
+          Raise the ticket {{ ico('arrow') }}</button>
+      </div>
+    </form>
+
+    <aside>
+      <div class="banner banner--warn">
+        {{ ico('warn') }}
+        <span><b>Site completely down?</b> Raise it as
+          {{ priorities['p1'] }} and then
+          {% if wa_link %}<a href="{{ wa_link }}" target="_blank" rel="noopener">message us on
+          WhatsApp</a>{% else %}call us{% endif %} so it is seen immediately.</span>
+      </div>
+
+      <div class="card r r--right">
+        <h4>Already raised one?</h4>
+        <p class="small">Look it up with the reference and the email you used. No password.</p>
+        <a class="btn btn--ghost btn--block mt" href="{{ url_for('public.support_status') }}">
+          {{ ico('search') }} Check a ticket</a>
+      </div>
+
+      <div class="card mt r r--right">
+        <h4>What counts as support</h4>
+        <ul class="ticks">
+          <li>Something that used to work and stopped</li>
+          <li>Errors, downtime and broken forms</li>
+          <li>Small content and copy corrections</li>
+          <li>Questions about how something works</li>
+        </ul>
+        <h4 style="margin-top:22px">What becomes a change request</h4>
+        <ul class="ticks ticks--no">
+          <li>New pages, features or integrations</li>
+          <li>Redesigns and rebuilds</li>
+          <li>Anything outside the accepted scope</li>
+        </ul>
+        <p class="small mt">Raise it here anyway - we will convert it into a quote so you can
+          see the cost before anyone starts.</p>
+      </div>
+
+      {% if contact.support_email %}
+      <div class="card mt r r--right">
+        <h4>Prefer email?</h4>
+        <p class="small"><a href="mailto:{{ contact.support_email }}">{{ contact.support_email }}</a>
+          reaches the same desk, but the form gets you a reference and a tracked clock.</p>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+{% if faqs %}
+<section class="sec sec--alt">
+  <div class="wrap wrap--tight">
+    {{ sec_head('Common fixes', 'Try these first', mid=true) }}
+    {{ faq_list(faqs) }}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

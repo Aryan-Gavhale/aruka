@@ -1,0 +1,171 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# The whole ledger from the client's side: what was invoiced, what was received,
+   what was credited, and how to pay the rest. Bank details and the UPI ID are on the
+   page as well as in the PDF, because the person paying is often not the person who
+   was emailed the invoice. #}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <h1>Invoices</h1>
+    <p class="lede">Every invoice, receipt and credit note on your account.</p>
+  </div>
+  {% if balance.balance %}
+  <span class="pdue">
+    <span>Outstanding</span>
+    <b>{{ balance.balance | money }}</b>
+  </span>
+  {% endif %}
+</div>
+
+{% if not balance.balance %}
+<div class="banner banner--ok">
+  {{ ico('check') }}
+  <span><b>Nothing due.</b> Your account is settled to
+    {{ balance.paid | money }} received against {{ balance.invoiced | money }} invoiced.</span>
+</div>
+{% endif %}
+
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('doc') }} Invoices</h2></div>
+  {% if rows %}
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Reference</th><th scope="col">What for</th>
+          <th scope="col">Issued</th><th scope="col">Due</th>
+          <th scope="col" class="num">Total</th><th scope="col" class="num">Balance</th>
+          <th scope="col">Status</th><th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set days = row.due_on | days_until if row.due_on else none %}
+        <tr class="{{ 'is-warn' if row.balance and days is not none and days < 0 }}">
+          <th scope="row">{{ row.ref }}
+            {% if row.kind == 'proforma' %}<br><span class="small">Proforma</span>{% endif %}</th>
+          <td>{{ row.notes | truncate(60) if row.notes else '—' }}</td>
+          <td>{{ row.issued_on | date_fmt }}</td>
+          <td>
+            {{ row.due_on | date_fmt if row.due_on else '—' }}
+            {% if row.balance and days is not none and days < 0 %}
+            <br><span class="small">{{ -days }} days late</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ row.total | money }}</td>
+          <td class="num">{{ row.balance | money if row.balance else '—' }}</td>
+          <td><span class="chip chip--{{ row.status }}">
+            {{ INVOICE_STATUS_LABELS.get(row.status, row.status) }}</span></td>
+          <td class="num"><a href="{{ url_for('portal.invoice_pdf', invoice_id=row.id) }}"
+                             target="_blank" rel="noopener">PDF</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row" colspan="4">Total</th>
+          <td class="num">{{ balance.invoiced | money }}</td>
+          <td class="num">{{ balance.balance | money }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No invoices on your account yet.</p>
+  {% endif %}
+</section>
+
+{# ── how to pay ───────────────────────────────────────────────────────────── #}
+{% if balance.balance and (upi or bank.account_no) %}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('zap') }} How to pay</h2></div>
+  <div class="grid g2">
+    {% if upi %}
+    <div class="pcard pcard--flat">
+      <h3>UPI</h3>
+      <p class="ppay">{{ upi }}</p>
+      <p class="small">Put the invoice reference in the payment note. That is what lets us
+        match it the same day and send the receipt without being chased.</p>
+    </div>
+    {% endif %}
+    {% if bank.account_no %}
+    <div class="pcard pcard--flat">
+      <h3>Bank transfer</h3>
+      <dl class="dl">
+        {% if bank.account_name %}<dt>Account name</dt><dd>{{ bank.account_name }}</dd>{% endif %}
+        {% if bank.name %}<dt>Bank</dt><dd>{{ bank.name }}</dd>{% endif %}
+        <dt>Account number</dt><dd>{{ bank.account_no }}</dd>
+        {% if bank.ifsc %}<dt>IFSC</dt><dd>{{ bank.ifsc }}</dd>{% endif %}
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{# ── receipts ─────────────────────────────────────────────────────────────── #}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('check') }} Payments received</h2></div>
+  {% if payments %}
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">Receipt</th><th scope="col">Date</th><th scope="col">Method</th>
+          <th scope="col">Reference</th><th scope="col" class="num">Amount</th>
+          <th scope="col" class="num">TDS</th><th scope="col"></th></tr>
+      </thead>
+      <tbody>
+        {% for row in payments %}
+        <tr>
+          <th scope="row">{{ row.ref }}</th>
+          <td>{{ row.paid_on | date_fmt }}</td>
+          <td>{{ row.method }}{% if row.is_advance %}<br><span class="small">Advance</span>{% endif %}</td>
+          <td>{{ row.reference or '—' }}</td>
+          <td class="num">{{ row.amount | money }}</td>
+          <td class="num">{{ row.tds_amount | money if row.tds_amount else '—' }}</td>
+          <td class="num"><a href="{{ url_for('portal.receipt_pdf', payment_id=row.id) }}"
+                             target="_blank" rel="noopener">PDF</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small">TDS you have deducted is credited against the invoice as received. Send us
+    the Form 16A when you have it and we will file our side.</p>
+  {% else %}
+  <p class="empty">Nothing received yet.</p>
+  {% endif %}
+</section>
+
+{% if credit_notes %}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('refresh') }} Credit notes</h2></div>
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">Reference</th><th scope="col">Issued</th><th scope="col">Why</th>
+          <th scope="col" class="num">Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for row in credit_notes %}
+        <tr>
+          <th scope="row">{{ row.ref }}</th>
+          <td>{{ row.issued_on | date_fmt }}</td>
+          <td>{{ row.reason or '—' }}</td>
+          <td class="num">{{ row.amount | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<p class="small mt">Something does not look right on an invoice? Reply to the email it came
+  on, or <a href="{{ url_for('portal.ticket_new') }}">raise it here</a>. We would rather fix
+  a wrong invoice than have you sit on it.</p>
+{% endblock %}

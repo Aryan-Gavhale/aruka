@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.clients_list') }}">Clients</a> &rsaquo; New</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  {% include "admin/_client_fields.html" %}
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Create the client</button>
+    <a class="b b--ghost" href="{{ url_for('admin.clients_list') }}">Cancel</a>
+    <span class="savebar__note">A reference is allocated on save. Everything here is editable
+      afterwards, but the billing name and state are what land on invoices.</span>
+  </div>
+</form>
+
+{% endblock %}

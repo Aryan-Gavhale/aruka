@@ -1,0 +1,54 @@
+{# The prose sections and the clause picker. Shared by the new-document form and the
+   editor on the detail page, so the two can never drift apart. #}
+{% from "admin/_icons.html" import ico %}
+
+{% macro body_fields(fields, body) %}
+<div class="grid">
+  {% for key in fields %}
+  {% set label, help_text = BODY_LABELS.get(key, (key, '')) %}
+  <div class="fi fi--12">
+    <label for="d-{{ key }}">{{ label }}</label>
+    <textarea class="in in--doc" id="d-{{ key }}" name="{{ key }}"
+              rows="{{ 7 if key in ('intro', 'assumptions') else 5 }}">{{ body.get(key, '') }}</textarea>
+    {% if help_text %}<span class="hint">{{ help_text }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
+{% macro clause_picker(clauses, selected, categories) %}
+{% if clauses %}
+<p class="hint">Ticked clauses are frozen into the document when it is shared, at the version
+  they are today. Editing the library afterwards does not change a document a client has
+  already read - which is the only honest way to keep wording under version control.</p>
+
+{% for code, label in categories.items() %}
+{% set group = clauses | selectattr('category', 'equalto', code) | list %}
+{% if group %}
+<fieldset class="clauses">
+  <legend>{{ label }}</legend>
+  {% for clause in group %}
+  <label class="clause {{ 'is-required' if clause.is_required }}">
+    <input type="checkbox" name="clause_ids" value="{{ clause.id }}"
+           {{ 'checked' if clause.id in selected }}>
+    <span class="clause__b">
+      <span class="clause__t">
+        {{ clause.title }}
+        <em>v{{ clause.version }}</em>
+        {% if clause.is_required %}<em class="clause__req">always included</em>{% endif %}
+        {% if not clause.is_active %}<em class="clause__off">retired</em>{% endif %}
+      </span>
+      <span class="clause__x">{{ clause.body | shorten(180) }}</span>
+    </span>
+  </label>
+  {% endfor %}
+</fieldset>
+{% endif %}
+{% endfor %}
+
+{% else %}
+<p class="muted">The clause library has nothing that applies to this kind of document.
+  <a href="{{ url_for('admin.clauses_list') }}">Add some wording</a> first.</p>
+{% endif %}
+{% endmacro %}

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+config.json
+db/*.db
+db/*.db-wal
+db/*.db-shm
+db/secret.key
+db/vault.key
+db/first-login.txt
+static/uploads/*
+!static/uploads/.gitkeep
+backups/*
+!backups/.gitkeep
+_shots/
+_out/
+.venv/
+venv/

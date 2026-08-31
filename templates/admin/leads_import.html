@@ -1,0 +1,73 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.leads_list') }}">Leads</a> &rsaquo; Import</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="grid">
+  <form class="pan pan--7" method="post" enctype="multipart/form-data"
+        action="{{ url_for('admin.leads_import') }}">
+    {{ csrf() }}
+    <h2 class="pan__h">{{ ico('up') }} Import a CSV</h2>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--12">
+          <label for="file">CSV file <em>*</em></label>
+          <input class="in" id="file" name="file" type="file" accept=".csv,text/csv" required>
+        </div>
+        <div class="fi fi--6">
+          <label for="source_id">Tag them all with a source</label>
+          <select class="in" id="source_id" name="source_id">
+            <option value="">Leave the source blank</option>
+            {% for row in sources %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="pan__f">
+      <button class="b" type="submit">{{ ico('check') }} Import</button>
+      <a class="b b--ghost" href="{{ url_for('admin.leads_list') }}">Cancel</a>
+    </div>
+  </form>
+
+  <section class="pan pan--5">
+    <h2 class="pan__h">{{ ico('help') }} What the file needs</h2>
+    <div class="pan__b">
+      <p>A header row, then one lead per row. Only <b>name</b> plus <b>either</b> an email or a
+      phone is required - a row without a way to reach someone is skipped rather than imported
+      as a dead record.</p>
+
+      <p class="lbl">Column names it recognises</p>
+      <ul class="lst lst--plain">
+        <li><code>name</code> &middot; also <code>full name</code>, <code>contact</code></li>
+        <li><code>email</code></li>
+        <li><code>phone</code> &middot; also <code>mobile</code>, <code>number</code></li>
+        <li><code>whatsapp</code> &middot; falls back to the phone</li>
+        <li><code>company</code>, <code>city</code></li>
+        <li><code>service</code> &middot; also <code>service_interest</code></li>
+        <li><code>budget</code></li>
+        <li><code>value</code> &middot; also <code>quote_value</code></li>
+        <li><code>message</code> &middot; also <code>notes</code></li>
+      </ul>
+      <p class="hint">Anything else in the file is ignored. Header names are matched
+      case-insensitively.</p>
+
+      <hr class="rule">
+
+      <p class="lbl">Duplicates</p>
+      <p>A row whose email, phone or WhatsApp number already exists is skipped, not merged and
+      not added again. Duplicates are what make a CRM stop being trusted, so the import
+      refuses to create them and tells you how many it passed over.</p>
+
+      <p class="lbl">Getting a template</p>
+      <p><a href="{{ url_for('admin.leads_export') }}">Export your leads</a> and use that file's
+      header row - the export and the import speak the same column names.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Clients &middot; {{ rows | length }} shown</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.receivables') }}">{{ ico('wallet') }} Receivables</a>
+<a class="b b--sm" href="{{ url_for('admin.client_new') }}">{{ ico('plus') }} New client</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="pan">
+  <div class="pan__b">
+    <form class="filters" method="get">
+      <div class="fi fi--4">
+        <span>Search</span>
+        <input class="in in--sm" type="search" name="q" value="{{ q }}"
+               placeholder="Name, contact, email, phone or reference">
+      </div>
+      <div class="fi fi--4">
+        <span>Show</span>
+        <select class="in in--sm" name="show" data-autofilter>
+          <option value="active" {{ 'selected' if show == 'active' }}>Active clients</option>
+          <option value="owing" {{ 'selected' if show == 'owing' }}>Owing money</option>
+          <option value="all" {{ 'selected' if show == 'all' }}>Everyone, including dormant</option>
+        </select>
+      </div>
+      <div class="fi fi--4 fi--end">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('search') }} Filter</button>
+        {% if q or show != 'active' %}
+        <a class="b b--sm b--plain" href="{{ url_for('admin.clients_list') }}">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Client</th><th>Contact</th><th class="num">Projects</th>
+            <th class="num">Collected</th><th class="num">Owing</th><th>Support</th>
+            <th class="act">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="{{ 'is-draft' if not row.is_active }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.client_detail', client_id=row.id) }}">{{ row.name }}</a>
+              <span class="sub mono">{{ row.ref }}{% if row.city %} &middot; {{ row.city }}{% endif %}</span>
+            </td>
+            <td>
+              {{ row.contact_name or '—' }}
+              {% if row.email %}<span class="sub">{{ row.email }}</span>{% endif %}
+            </td>
+            <td class="num">{{ row.projects or 0 }}</td>
+            <td class="num">{{ row.collected | cmoney }}</td>
+            <td class="num {{ 'is-bad' if row.owing }}">
+              {% if row.owing %}<b>{{ row.owing | cmoney }}</b>{% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if row.open_tickets %}{{ badge(row.open_tickets ~ ' open', 'warn') }}
+              {% else %}<span class="muted">clear</span>{% endif %}
+            </td>
+            <td class="act">
+              {{ wa_button(row.whatsapp, 'client', row.id, row.opt_out) }}
+              <a class="ib" title="Open" href="{{ url_for('admin.client_detail', client_id=row.id) }}">{{ ico('pen') }}</a>
+              <a class="ib" title="Raise an invoice"
+                 href="{{ url_for('admin.invoice_new', client_id=row.id) }}">{{ ico('wallet') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('briefcase') }}
+      <h3>{% if q %}Nothing matches “{{ q }}”{% else %}No clients yet{% endif %}</h3>
+      <p>Converting a won lead creates the client, the project and its milestones together -
+        that is the normal way one appears here.</p>
+      <a class="b b--ghost" href="{{ url_for('admin.leads_board') }}">Open the pipeline</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

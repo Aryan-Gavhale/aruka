@@ -1,0 +1,181 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, invoice_badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.analytics') }}">Analytics</a> &rsaquo;
+  <a href="{{ url_for('admin.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+  &rsaquo; profit and loss</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.project_detail', project_id=project.id) }}">
+  {{ ico('rocket') }} The project</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.expenses_new') }}">
+  {{ ico('plus') }} Log an expense</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Collected', pl.collected | cmoney,
+         (pl.outstanding | cmoney) ~ ' still owed' if pl.outstanding else 'nothing outstanding',
+         'good' if pl.collected else '') }}
+  {{ kpi('Cost', pl.total_cost | cmoney,
+         (pl.direct_cost | cmoney) ~ ' logged, ' ~ (pl.estimated_cost | cmoney) ~ ' expected') }}
+  {{ kpi('Margin', pl.margin | cmoney, pl.margin_pct ~ '% of what came in',
+         'good' if pl.margin > 0 else 'bad') }}
+  {{ kpi('Per hour', pl.hourly | cmoney if pl.hourly else 'unknown',
+         (pl.hours ~ ' hours logged') if pl.hours else 'no hours logged',
+         'bad' if pl.hourly and cost_per_hour and pl.hourly < cost_per_hour else '') }}
+</div>
+
+{% if pl.hourly and cost_per_hour and pl.hourly < cost_per_hour %}
+<div class="note note--bad">
+  <b>This project earned {{ pl.hourly | money }} an hour against a cost of
+    {{ cost_per_hour | money }}.</b>
+  It made a margin on paper and lost money on your time. Two more like it and there is no
+  capacity left for the work that pays.
+</div>
+{% elif not pl.hours %}
+<div class="note note--info">
+  No hours are logged against this project, so the margin below is real but the hourly rate is
+  unknowable. Hours come from task actuals and ticket time logs.
+</div>
+{% endif %}
+
+<div class="grid">
+  <section class="pan pan--7">
+    <div class="pan__h">{{ ico('wallet') }} <h2>Money in</h2></div>
+    <div class="pan__b pan__b--flush">
+      {% if invoices %}
+      <table class="tbl">
+        <thead>
+          <tr><th>Invoice</th><th>Status</th><th class="num">Total</th><th class="num">Received</th></tr>
+        </thead>
+        <tbody>
+          {% for row in invoices %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.invoice_detail', invoice_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.issued_on | date_fmt('%d %b %Y') }}</span></td>
+            <td>{{ invoice_badge(row.status) }}</td>
+            <td class="num">{{ row.total | money }}</td>
+            <td class="num {{ 'is-bad' if row.balance }}">
+              {{ (row.amount_paid + row.tds_amount) | money }}
+              {% if row.balance %}<span class="sub">{{ row.balance | money }} due</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="row--total">
+            <th colspan="3">Collected</th>
+            <td class="num">{{ pl.collected | money }}</td>
+          </tr>
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing invoiced against this project yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__h">{{ ico('coins') }} <h2>Money out</h2></div>
+    <div class="pan__b pan__b--flush">
+      {% if expenses %}
+      <table class="tbl">
+        <thead>
+          <tr><th>Expense</th><th>Category</th><th>Paid</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for row in expenses %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.expenses_edit', row_id=row.id) }}">
+              {{ row.description | shorten(40) }}</a>
+              {% if row.vendor %}<span class="sub">{{ row.vendor }}</span>{% endif %}</td>
+            <td>{{ row.category_name or '—' }}</td>
+            <td>{{ row.paid_on | date_fmt('%d %b %y') }}</td>
+            <td class="num">{{ row.amount | money }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="row--sum">
+            <th colspan="3">Tagged to this project</th>
+            <td class="num">{{ pl.direct_cost | money }}</td>
+          </tr>
+          <tr class="row--sum">
+            <th colspan="3">Expected cost on the project record</th>
+            <td class="num">{{ pl.estimated_cost | money }}</td>
+          </tr>
+          <tr class="row--total">
+            <th colspan="3">Total cost</th>
+            <td class="num">{{ pl.total_cost | money }}</td>
+          </tr>
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">
+        No expenses tagged here. The cost figure is whatever was typed on the project record
+        as the expected cost, which is a guess until receipts land against it.
+      </p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="pan pan--5">
+    <div class="pan__h">{{ ico('clock') }} <h2>Where the hours went</h2></div>
+    <div class="pan__b">
+      <dl class="dl dl--tight">
+        <dt>Total hours</dt><dd>{{ pl.hours }}</dd>
+        <dt>Your cost per hour</dt>
+        <dd>{{ cost_per_hour | money }}
+          <span class="sub">from analytics settings</span></dd>
+        <dt>Time cost at that rate</dt>
+        <dd>{{ (pl.hours * cost_per_hour) | money }}</dd>
+        <dt>Effective rate</dt>
+        <dd><b>{{ pl.hourly | money if pl.hourly else '—' }}</b></dd>
+      </dl>
+      <p class="hint">Task actuals plus every minute logged against a ticket for this project.
+        The time cost is not subtracted from the margin above - your own time is not an
+        expense until you pay someone else for it - but it is the number that tells you
+        whether the work was worth doing.</p>
+    </div>
+
+    {% if time_logs %}
+    <div class="pan__h">{{ ico('list') }} <h2>Support time</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in time_logs %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.ticket_detail', ticket_id=row.ticket_id) }}">
+                {{ row.ticket_ref }}</a>
+              <span class="sub">{{ row.subject | shorten(36) }}</span>
+              {% if row.notes %}<span class="sub">{{ row.notes }}</span>{% endif %}
+            </td>
+            <td class="num">{{ (row.minutes / 60) | round(1) }}h
+              <span class="sub">{{ row.logged_on | date_fmt('%d %b') }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint" style="padding:10px 18px">
+        Support hours on a fixed-price project are the quiet way a good margin disappears.
+        If this list is long, the next quote for this client should include a care plan.
+      </p>
+    </div>
+    {% endif %}
+
+    <div class="pan__f">
+      <h3 class="sub-h">The project</h3>
+      <dl class="dl dl--tight">
+        <dt>Client</dt>
+        <dd><a href="{{ url_for('admin.client_detail', client_id=project.client_id) }}">{{ project.client_name }}</a></dd>
+        <dt>Value quoted</dt><dd>{{ project.value | money }}</dd>
+        <dt>Invoiced</dt><dd>{{ pl.invoiced | money }}</dd>
+        <dt>Started</dt><dd>{{ project.start_on | date_fmt('%d %b %Y') }}</dd>
+        <dt>Went live</dt>
+        <dd>{{ project.launched_on | date_fmt('%d %b %Y') if project.launched_on else 'not yet' }}</dd>
+      </dl>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

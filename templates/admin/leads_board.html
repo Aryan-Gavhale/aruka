@@ -1,0 +1,114 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, bar %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_list') }}">{{ ico('list') }} Table</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.conversion') }}">{{ ico('funnel') }} Conversion</a>
+<a class="b b--sm" href="{{ url_for('admin.lead_new') }}">{{ ico('plus') }} New lead</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis">
+  {{ kpi('Open pipeline', forecast.raw | cmoney, forecast.detail | sum(attribute='n') ~ ' live leads') }}
+  {{ kpi('Weighted forecast', forecast.weighted | cmoney, 'By stage probability', 'brand') }}
+  {{ kpi('Follow-ups due', due | length, 'Today or earlier', 'warn' if due else '') }}
+  {{ kpi('Overdue', overdue | length, 'Already past the date', 'bad' if overdue else 'good') }}
+</div>
+
+{% if overdue %}
+<div class="note note--bad">
+  <b>{{ overdue | length }} follow-up{{ 's' if overdue | length != 1 }} slipped.</b>
+  Oldest is {{ overdue[0].name }}, due {{ overdue[0].next_followup_on | date_fmt }}.
+  <a href="{{ url_for('admin.followups') }}">Work the queue</a>.
+</div>
+{% endif %}
+
+<div class="board" data-board data-move-url="{{ url_for('admin.lead_move') }}">
+  {% for column in columns %}
+  <section class="col" data-stage="{{ column.stage }}">
+    <header class="col__h">
+      <span class="col__t">{{ column.label }}</span>
+      <span class="col__n">{{ column.rows | length }}</span>
+      <span class="col__v">{{ column.value | cmoney }}</span>
+      {% if column.probability %}<span class="col__p">{{ column.probability }}%</span>{% endif %}
+    </header>
+
+    <div class="col__b" data-drop>
+      {% for lead in column.rows %}
+      <article class="card" draggable="true" data-lead="{{ lead.id }}">
+        <a class="card__t" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>
+        {% if lead.company %}<span class="card__s">{{ lead.company }}</span>{% endif %}
+        <div class="card__m">
+          {% if lead.quote_value %}<b>{{ lead.quote_value | cmoney }}</b>{% endif %}
+          {% if lead.service_interest %}<span>{{ lead.service_interest | shorten(24) }}</span>{% endif %}
+        </div>
+        <div class="card__f">
+          <span class="score" title="Lead score {{ lead.score }} of 100">
+            <span style="width: {{ lead.score }}%"></span>
+          </span>
+          {% if lead.next_followup_on %}
+          <span class="card__d {{ 'is-late' if (lead.next_followup_on | days_until) is not none and (lead.next_followup_on | days_until) < 0 }}">
+            {{ ico('calendar') }} {{ lead.next_followup_on | date_fmt('%d %b') }}
+          </span>
+          {% else %}
+          <span class="card__d is-none">{{ ico('calendar') }} none</span>
+          {% endif %}
+          {% if lead.whatsapp %}
+          <a class="card__w" title="Send WhatsApp"
+             href="{{ url_for('admin.wa_compose', kind='lead', target_id=lead.id) }}">{{ ico('whatsapp') }}</a>
+          {% endif %}
+        </div>
+        {% if lead.source_name %}<span class="card__src">{{ lead.source_name }}</span>{% endif %}
+      </article>
+      {% endfor %}
+
+      {% if not column.rows %}
+      <p class="col__empty">Nothing here.</p>
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+<form id="board-form" method="post" hidden>{{ csrf() }}</form>
+
+<div class="grid" style="margin-top:20px">
+  <section class="pan pan--6">
+    <h2 class="pan__h">{{ ico('trend') }} Weighted by stage</h2>
+    <div class="pan__b">
+      {% set peak = forecast.detail | map(attribute='value') | max if forecast.detail else 0 %}
+      {% for row in forecast.detail %}
+        {{ bar(row.label ~ ' (' ~ row.probability ~ '%)', row.value, peak, row.weighted | cmoney) }}
+      {% endfor %}
+      {% if not forecast.detail %}<p class="muted">No open leads yet.</p>{% endif %}
+      <p class="hint">Probabilities are yours to set, under Settings &rsaquo; CRM. They only
+      affect this forecast.</p>
+    </div>
+  </section>
+
+  <section class="pan pan--6">
+    <h2 class="pan__h">{{ ico('bell') }} Next up</h2>
+    <div class="pan__b">
+      {% if due %}
+      <ul class="lst">
+        {% for lead in due[:8] %}
+        <li>
+          <a href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>
+          <span class="{{ 'is-bad' if (lead.next_followup_on | days_until) < 0 }}">
+            {{ lead.next_followup_on | date_fmt('%d %b') }}
+          </span>
+          {% if lead.followup_note %}<em>{{ lead.followup_note | shorten(60) }}</em>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <p style="margin:12px 0 0"><a href="{{ url_for('admin.followups') }}">All follow-ups</a></p>
+      {% else %}
+      <p class="muted">Nothing due. Every open lead has a date in the future.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{% endblock %}

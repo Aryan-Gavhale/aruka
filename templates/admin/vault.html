@@ -1,0 +1,248 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Assets and credentials &middot; {{ rows | length }} tracked</p>
+{% endblock %}
+
+{% block content %}
+
+{% if not vault_ready %}
+<div class="note note--bad">
+  <b>The vault has no key.</b> Nothing can be encrypted until <span class="mono">db/vault.key</span>
+  exists. Run <span class="mono">python app.py vaultkey</span> once, keep that file out of your
+  backups' reach, and never commit it. Without the key file the stored secrets are unreadable -
+  which is the point, and also the risk.
+</div>
+{% endif %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Expired', expired | length, 'Already lapsed', 'bad' if expired else 'good') }}
+  {{ kpi('Expiring', expiring | length, 'Inside ' ~ horizon ~ ' days',
+         'warn' if expiring else '') }}
+  {{ kpi('Credentials', credentials | length, 'Encrypted at rest') }}
+</div>
+
+{% if expired %}
+<div class="note note--bad">
+  <b>{{ expired | length }} thing{{ '' if expired | length == 1 else 's' }} already expired.</b>
+  A lapsed domain is the one failure a client will never forget, because the site simply stops
+  existing and the name can be bought by anyone.
+</div>
+{% endif %}
+
+<div class="grid">
+  <!-- ── assets ───────────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('globe') }} <h2>Domains, hosting and everything with a date on it</h2>
+      <p>Sorted by what dies first.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if rows %}
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Asset</th><th>Client</th><th>Expires</th>
+              {% if is_owner() %}<th class="num">Renew cost</th>{% endif %}
+              <th>Owned by</th></tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            {% set days = row.expires_on | days_until %}
+            <tr class="{{ 'is-flagged' if days is not none and days < 0
+                          else ('is-warn' if days is not none and days <= horizon) }}">
+              <td>
+                <b>{{ row.label }}</b>
+                <span class="sub">{{ kinds.get(row.kind, row.kind) }}
+                  {%- if row.provider %} &middot; {{ row.provider }}{% endif %}
+                  {%- if row.identifier %} &middot; <span class="mono">{{ row.identifier }}</span>{% endif %}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a>
+                {% if row.project_name %}<span class="sub">{{ row.project_name }}</span>{% endif %}
+              </td>
+              <td>
+                {% if row.expires_on %}
+                  {{ row.expires_on | date_fmt('%d %b %Y') }}
+                  <span class="sub {{ 'is-bad' if days < 0 }}">
+                    {% if days < 0 %}lapsed {{ days | abs }} days ago
+                    {% else %}{{ days }} days{% endif %}
+                    {%- if row.auto_renew %} &middot; auto-renews{% endif %}
+                  </span>
+                {% else %}<span class="muted">no expiry</span>{% endif %}
+              </td>
+              {% if is_owner() %}
+              <td class="num">{{ row.renew_cost | cmoney if row.renew_cost else '—' }}</td>
+              {% endif %}
+              <td>
+                {{ badge(row.owned_by, 'good' if row.owned_by == 'client' else 'warn') }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        {{ ico('globe') }}
+        <h3>Nothing tracked yet</h3>
+        <p>Add each client's domain and hosting as you take it on. The dashboard then warns you
+          before anything lapses instead of after.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="pan__b">
+      <details class="adder" {{ 'open' if not rows }}>
+        <summary>{{ ico('plus') }} Add an asset</summary>
+        <form method="post" action="{{ url_for('admin.asset_add') }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--4"><label for="a-client">Client</label>
+              <select class="in in--sm" id="a-client" name="client_id" required>
+                <option value="">Choose</option>
+                {% for row in clients %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--4"><label for="a-project">Project</label>
+              <select class="in in--sm" id="a-project" name="project_id">
+                <option value="">Not project-specific</option>
+                {% for row in projects %}<option value="{{ row.id }}">{{ row.ref }} - {{ row.name }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--4"><label for="a-kind">Kind</label>
+              <select class="in in--sm" id="a-kind" name="kind">
+                {% for code, label in kinds.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+              </select></div>
+
+            <div class="fi fi--4"><label for="a-label">Label</label>
+              <input class="in in--sm" id="a-label" name="label" required placeholder="example.com"></div>
+            <div class="fi fi--4"><label for="a-provider">Provider</label>
+              <input class="in in--sm" id="a-provider" name="provider" placeholder="GoDaddy, Hostinger, AWS"></div>
+            <div class="fi fi--4"><label for="a-id">Account or identifier</label>
+              <input class="in in--sm" id="a-id" name="identifier"></div>
+
+            <div class="fi fi--3"><label for="a-start">Starts</label>
+              <input class="in in--sm" id="a-start" name="starts_on" type="date"></div>
+            <div class="fi fi--3"><label for="a-exp">Expires</label>
+              <input class="in in--sm" id="a-exp" name="expires_on" type="date"></div>
+            <div class="fi fi--3"><label for="a-cost">Renewal cost to you</label>
+              <input class="in in--sm" id="a-cost" name="renew_cost" type="number" step="1"></div>
+            <div class="fi fi--3"><label for="a-price">What you charge</label>
+              <input class="in in--sm" id="a-price" name="renew_price" type="number" step="1"></div>
+
+            <div class="fi fi--4"><label for="a-owned">Owned by</label>
+              <select class="in in--sm" id="a-owned" name="owned_by">
+                <option value="client">The client</option>
+                <option value="agency">Us, on their behalf</option>
+              </select>
+              <span class="hint">Say it out loud in the contract too. Ownership arguments happen
+                when a client leaves, never before.</span></div>
+            <div class="fi fi--8"><label for="a-url">Where it is managed</label>
+              <input class="in in--sm" id="a-url" name="url" type="url" placeholder="https://"></div>
+          </div>
+          <label class="sw">
+            <input type="checkbox" name="auto_renew" value="1">
+            <span class="sw__t"></span>
+            <span class="sw__l">It auto-renews at the provider</span>
+          </label>
+          <label class="sw">
+            <input type="checkbox" name="make_recurring" value="1" checked>
+            <span class="sw__t"></span>
+            <span class="sw__l">Bill the client for it yearly
+              <span>Creates a recurring item due on the expiry date, so the renewal appears in
+                your calendar with an invoice one click away.</span></span>
+          </label>
+          <button class="b b--sm" type="submit">Save the asset</button>
+        </form>
+      </details>
+    </div>
+  </section>
+
+  <!-- ── credentials ──────────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <div class="pan__h">
+      {{ ico('key') }} <h2>Credentials</h2>
+      <p>Encrypted with a key that lives beside the database, not inside it. Revealing one is
+        owner-only and written to the activity log.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if credentials %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in credentials %}
+          <tr>
+            <td>
+              <b>{{ row.label }}</b>
+              <span class="sub">{{ row.client_name }}
+                {%- if row.username %} &middot; <span class="mono">{{ row.username }}</span>{% endif %}</span>
+              {% if row.url %}
+              <span class="sub"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">
+                {{ row.url | shorten(40) }}</a></span>
+              {% endif %}
+              <p class="secret" data-secret-for="{{ row.id }}" hidden></p>
+            </td>
+            <td class="act">
+              {% if is_owner() %}
+              <button class="ib" type="button" title="Reveal"
+                      data-reveal="{{ row.id }}"
+                      data-url="{{ url_for('admin.credential_reveal', row_id=row.id) }}">
+                {{ ico('eye') }}</button>
+              <form method="post" action="{{ url_for('admin.credential_delete', row_id=row.id) }}"
+                    data-confirm="Delete the stored secret for {{ row.label }}?">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="Delete">{{ ico('trash') }}</button>
+              </form>
+              {% else %}
+              <span class="sub">owner only</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing stored yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__b">
+      <details class="adder">
+        <summary>{{ ico('plus') }} Store a credential</summary>
+        <form method="post" action="{{ url_for('admin.credential_add') }}" autocomplete="off">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--12"><label for="c-client">Client</label>
+              <select class="in in--sm" id="c-client" name="client_id" required>
+                <option value="">Choose</option>
+                {% for row in clients %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--12"><label for="c-label">What it opens</label>
+              <input class="in in--sm" id="c-label" name="label" required
+                     placeholder="WordPress admin, cPanel, Google Analytics"></div>
+            <div class="fi fi--12"><label for="c-url">Login URL</label>
+              <input class="in in--sm" id="c-url" name="url" type="url" placeholder="https://"></div>
+            <div class="fi fi--12"><label for="c-user">Username</label>
+              <input class="in in--sm" id="c-user" name="username" autocomplete="off"></div>
+            <div class="fi fi--12"><label for="c-secret">Password or key</label>
+              <input class="in in--sm" id="c-secret" name="secret" type="password" autocomplete="new-password">
+              <span class="hint">Stored encrypted. Leave it empty to record only where the
+                account lives, which is often all you need.</span></div>
+            <div class="fi fi--12"><label for="c-notes">Notes</label>
+              <input class="in in--sm" id="c-notes" name="notes"
+                     placeholder="2FA is on the client's phone"></div>
+          </div>
+          <button class="b b--sm" type="submit">Store it</button>
+        </form>
+      </details>
+    </div>
+
+    <div class="pan__f">
+      <p class="hint">A password manager the client also uses is better than this for anything
+        shared day to day. This exists so that a handover, or a client who has lost access to
+        their own hosting, does not become your emergency.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

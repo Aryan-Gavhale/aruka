@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.users_list') }}">Team</a> &rsaquo;
+  {{ row.name or row.email if row else 'New person' }}</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  <div class="pan pan--narrow">
+    <div class="pan__h">
+      {{ ico('users') }} <h2>{{ 'Details' if row else 'Add someone to the team' }}</h2>
+    </div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="name">Name</label>
+          <input class="in" id="name" name="name" value="{{ row.name if row }}" required>
+        </div>
+        <div class="fi fi--6">
+          <label for="phone">Phone</label>
+          <input class="in" id="phone" name="phone" type="tel" value="{{ row.phone if row }}">
+        </div>
+
+        <div class="fi fi--6">
+          <label for="email">Email</label>
+          {% if row %}
+          <input class="in" id="email" value="{{ row.email }}" disabled>
+          <span class="hint">A sign-in email cannot be changed here - it is what the activity
+            log points at. Remove the account and add a new one instead.</span>
+          {% else %}
+          <input class="in" id="email" name="email" type="email" required autocomplete="off">
+          <span class="hint">This is what they sign in with.</span>
+          {% endif %}
+        </div>
+
+        <div class="fi fi--6">
+          <label for="role">Role</label>
+          {% if row and row.role == 'owner' %}
+          <input class="in" id="role" value="Owner" disabled>
+          <span class="hint">The owner role stays where it is.</span>
+          {% else %}
+          <select class="in" id="role" name="role">
+            {% for code in roles if code != 'owner' %}
+            <option value="{{ code }}" {{ 'selected' if row and row.role == code }}>
+              {{ ROLE_LABELS.get(code, code) }}
+            </option>
+            {% endfor %}
+          </select>
+          {% endif %}
+        </div>
+
+        <div class="fi fi--6">
+          <label for="password">{{ 'New password' if row else 'Password' }}</label>
+          <input class="in" id="password" name="password" type="password"
+                 autocomplete="new-password" {{ '' if row else 'required' }}>
+          <span class="hint">
+            At least 10 characters.
+            {% if row %} Leave it blank to keep the current one. They will have to sign in
+            again if you change it.{% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} {{ 'Save' if row else 'Create the account' }}</button>
+    <a class="b b--ghost" href="{{ url_for('admin.users_list') }}">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{% block content %}
+<div class="pcard">
+  <span class="eye">{{ ico('mail') }} Check your inbox</span>
+  <h1>Enter your code</h1>
+  <p class="lede">
+    {% if email %}Sent to <b>{{ email }}</b>.{% else %}We have sent a six-digit code.{% endif %}
+    It works once. If it has expired, ask for another.</p>
+
+  <form class="f" method="post" action="{{ url_for('portal.verify') }}" data-once>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    {% if not email %}
+    <div class="fi">
+      <label for="f-email">Your email <em>*</em></label>
+      <input class="in" id="f-email" name="email" type="email" required autocomplete="email">
+    </div>
+    {% else %}
+    <input type="hidden" name="email" value="{{ email }}">
+    {% endif %}
+
+    <div class="fi">
+      <label for="f-code">Six-digit code <em>*</em></label>
+      <input class="in in--code" id="f-code" name="code" required autofocus
+             inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+             pattern="[0-9]{6}" placeholder="000000" aria-describedby="code-help">
+      <span class="fi__h" id="code-help">Numbers only. Check your spam folder before asking
+        for a second one - the first stops working when a new one is sent.</span>
+    </div>
+
+    <button class="btn btn--lg btn--block" type="submit" data-busy="Checking&hellip;">
+      Sign in {{ ico('arrow') }}</button>
+  </form>
+
+  <p class="small mt"><a href="{{ url_for('portal.login') }}">Send a fresh code</a></p>
+</div>
+{% endblock %}

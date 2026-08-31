@@ -1,0 +1,71 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# Proposals, statements of work and anything else that was sent for a signature.
+   Accepted ones stay listed forever - the copy the client can pull up themselves is
+   worth more than the one in their inbox from eight months ago. #}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <h1>Documents</h1>
+    <p class="lede">What we have sent you to read, sign or keep.</p>
+  </div>
+</div>
+
+{% set waiting = rows | rejectattr('status', 'in', ['accepted', 'declined']) | list %}
+{% if waiting %}
+<div class="banner banner--warn">
+  {{ ico('doc') }}
+  <span><b>{{ waiting | length }} waiting on you.</b> Read it, ask us anything you want
+    changed, then accept at the bottom of the page. Nothing is binding until you do.</span>
+</div>
+{% endif %}
+
+{% if rows %}
+<ul class="pdocs">
+  {% for row in rows %}
+  {% set days = row.valid_until | days_until if row.valid_until else none %}
+  <li class="pdoc">
+    <span class="pdoc__i">{{ ico('doc') }}</span>
+    <div class="pdoc__b">
+      <a class="pdoc__t" href="{{ url_for('portal.document', document_id=row.id) }}">
+        {{ row.title or row.kind | replace('_', ' ') | title }}</a>
+      <p class="pdoc__m">
+        {{ row.ref }}
+        {% if row.version > 1 %}&middot; version {{ row.version }}{% endif %}
+        {% if row.issued_on %}&middot; issued {{ row.issued_on | date_fmt }}{% endif %}
+      </p>
+      <p class="pdoc__s">
+        {% if row.status == 'accepted' %}
+        {{ ico('check') }} Accepted {{ row.accepted_at | date_fmt }} by {{ row.accepted_by }}
+        {% elif row.status == 'declined' %}
+        Declined {{ row.declined_at | date_fmt }}
+        {% elif days is not none and days < 0 %}
+        {{ ico('clock') }} Expired {{ row.valid_until | date_fmt }} — ask us to reissue
+        {% elif days is not none %}
+        {{ ico('clock') }} Prices held until {{ row.valid_until | date_fmt }} ({{ days }} days)
+        {% else %}
+        Waiting on your signature
+        {% endif %}
+      </p>
+    </div>
+    <div class="pdoc__a">
+      <a class="btn btn--sm {{ 'btn--ghost' if row.status in ('accepted', 'declined') }}"
+         href="{{ url_for('portal.document', document_id=row.id) }}">
+        {{ 'Read' if row.status in ('accepted', 'declined') else 'Read and sign' }}</a>
+      <a class="small" href="{{ url_for('portal.document_pdf', document_id=row.id) }}"
+         target="_blank" rel="noopener">{{ ico('download') }} PDF</a>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Nothing here yet. Proposals and statements of work appear as soon as we
+  send them.</p>
+{% endif %}
+
+<p class="small mt">A document you accepted here is the agreement. If you need a
+  countersigned copy on letterhead for your records,
+  <a href="{{ url_for('portal.ticket_new') }}">ask</a> and we will send one.</p>
+{% endblock %}

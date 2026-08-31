@@ -1,0 +1,425 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, invoice_badge, wa_button %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.invoices_list') }}">Invoices</a> &rsaquo;
+  <span class="mono">{{ invoice.ref }}</span> &middot;
+  <a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a></p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" target="_blank" rel="noopener"
+   href="{{ url_for('admin.invoice_pdf', invoice_id=invoice.id) }}">{{ ico('doc') }} PDF</a>
+{% if invoice.balance %}
+{{ wa_button(client.whatsapp, 'invoice', invoice.id, client.opt_out, 'Send a reminder') }}
+{% endif %}
+{% if invoice.status == 'draft' %}
+<form method="post" action="{{ url_for('admin.invoice_issue', invoice_id=invoice.id) }}"
+      data-confirm="Issue this invoice? It takes the next number in the series, and that number is then used for good.">
+  {{ csrf() }}
+  <button class="b b--sm" type="submit">{{ ico('check') }} Issue it</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if invoice.status == 'draft' %}
+<div class="note note--info">
+  <b>This is still a draft.</b> It has no number yet, so nothing is committed - edit the lines
+  freely. Issuing it allocates {{ S('invoice.prefix') }}/INV/{{ fy_now }}/… and from then on a
+  correction means a credit note, not an edit.
+</div>
+{% endif %}
+
+{% if invoice.cancelled_at %}
+<div class="note note--bad">
+  <b>Cancelled {{ invoice.cancelled_at | date_fmt }}.</b>
+  {{ invoice.cancel_reason or 'No reason recorded.' }}
+  The number stays used so the series has no gap in it.
+</div>
+{% endif %}
+
+{% if dunning and invoice.balance %}
+<div class="note {{ 'note--bad' if dunning[0] >= 21 else 'note--warn' }}">
+  <b>{{ dunning[2] }}.</b>
+  {{ (invoice.due_on | days_until) | abs }} days past the due date of
+  {{ invoice.due_on | date_fmt }}.
+  {% if invoice.last_reminder_at %}
+  Last reminder logged {{ invoice.last_reminder_at | ago }}.
+  {% else %}
+  No reminder logged yet.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Total', invoice.total | money, 'Tax invoice' if gst else 'Bill of supply') }}
+  {{ kpi('Received', (invoice.amount_paid + invoice.tds_amount) | money,
+         ('includes ' ~ (invoice.tds_amount | money) ~ ' TDS') if invoice.tds_amount else 'in full',
+         'good' if invoice.amount_paid else '') }}
+  {{ kpi('Balance', invoice.balance | money,
+         ('due ' ~ (invoice.due_on | date_fmt('%d %b %Y'))) if invoice.due_on else '',
+         'bad' if invoice.balance else 'good') }}
+  {{ kpi('Status', INVOICE_STATUS_LABELS.get(invoice.status, invoice.status),
+         invoice.issued_on | date_fmt('%d %b %Y')) }}
+</div>
+
+<div class="grid">
+
+  <!-- ── the lines ────────────────────────────────────────────────────────── -->
+  <section class="pan pan--8">
+    <div class="pan__h">
+      {{ ico('list') }} <h2>What is being charged</h2>
+      <span class="spacer"></span>
+      {{ invoice_badge(invoice.status) }}
+    </div>
+    <div class="pan__b pan__b--flush">
+      <div class="tbl-wrap">
+        <table class="tbl tbl--lines">
+          <thead>
+            <tr>
+              <th>Item</th>{% if gst %}<th>HSN/SAC</th>{% endif %}
+              <th class="num">Qty</th><th class="num">Rate</th>
+              {% if gst %}<th class="num">GST</th>{% endif %}
+              <th class="num">Amount</th>
+              {% if invoice.status == 'draft' %}<th class="act"></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in lines %}
+            <tr>
+              <td>
+                <b>{{ line.label }}</b>
+                {% if line.description %}<span class="sub">{{ line.description }}</span>{% endif %}
+                {% if line.discount_pct %}<span class="sub">less {{ line.discount_pct }}%</span>{% endif %}
+              </td>
+              {% if gst %}<td class="mono">{{ line.hsn_sac or '—' }}</td>{% endif %}
+              <td class="num">{{ line.qty | round(2) }} {{ line.unit }}</td>
+              <td class="num">{{ line.unit_price | money }}</td>
+              {% if gst %}<td class="num">{{ line.tax_rate }}%</td>{% endif %}
+              <td class="num strong">{{ line.amount | money }}</td>
+              {% if invoice.status == 'draft' %}
+              <td class="act">
+                <form method="post"
+                      action="{{ url_for('admin.invoice_line_delete', invoice_id=invoice.id, line_id=line.id) }}"
+                      data-confirm="Remove this line?">
+                  {{ csrf() }}
+                  <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+
+            {% set span = 3 + (2 if gst else 0) %}
+            <tr class="row--sum">
+              <th colspan="{{ span }}">{{ 'Taxable value' if gst else 'Subtotal' }}</th>
+              <td class="num">{{ invoice.taxable_value | money }}</td>
+              {% if invoice.status == 'draft' %}<td></td>{% endif %}
+            </tr>
+            {% if invoice.discount_amount %}
+            <tr class="row--neg">
+              <th colspan="{{ span }}">Discount</th>
+              <td class="num">&minus;{{ invoice.discount_amount | money }}</td>
+              {% if invoice.status == 'draft' %}<td></td>{% endif %}
+            </tr>
+            {% endif %}
+            {% if gst %}
+              {% if invoice.igst %}
+              <tr class="row--sum">
+                <th colspan="{{ span }}">IGST</th>
+                <td class="num">{{ invoice.igst | money }}</td>
+                {% if invoice.status == 'draft' %}<td></td>{% endif %}
+              </tr>
+              {% else %}
+              <tr class="row--sum">
+                <th colspan="{{ span }}">CGST</th>
+                <td class="num">{{ invoice.cgst | money }}</td>
+                {% if invoice.status == 'draft' %}<td></td>{% endif %}
+              </tr>
+              <tr class="row--sum">
+                <th colspan="{{ span }}">SGST</th>
+                <td class="num">{{ invoice.sgst | money }}</td>
+                {% if invoice.status == 'draft' %}<td></td>{% endif %}
+              </tr>
+              {% endif %}
+            {% endif %}
+            {% if invoice.round_off %}
+            <tr class="row--sum">
+              <th colspan="{{ span }}">Rounding</th>
+              <td class="num">{{ invoice.round_off | money }}</td>
+              {% if invoice.status == 'draft' %}<td></td>{% endif %}
+            </tr>
+            {% endif %}
+            <tr class="row--total">
+              <th colspan="{{ span }}">Total</th>
+              <td class="num">{{ invoice.total | money }}</td>
+              {% if invoice.status == 'draft' %}<td></td>{% endif %}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="padding:10px 18px">{{ invoice.total | in_words }}</p>
+    </div>
+
+    {% if invoice.status == 'draft' %}
+    <div class="pan__b">
+      <details class="adder">
+        <summary>{{ ico('plus') }} Add a line</summary>
+        <form method="post" action="{{ url_for('admin.invoice_line_add', invoice_id=invoice.id) }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--6"><label for="l-label">What</label>
+              <input class="in in--sm" id="l-label" name="label" required></div>
+            <div class="fi fi--6"><label for="l-desc">Detail</label>
+              <input class="in in--sm" id="l-desc" name="description"></div>
+            <div class="fi fi--2"><label for="l-qty">Qty</label>
+              <input class="in in--sm" id="l-qty" name="qty" type="number" step="0.01" value="1"></div>
+            <div class="fi fi--2"><label for="l-unit">Unit</label>
+              <input class="in in--sm" id="l-unit" name="unit" value="each"></div>
+            <div class="fi fi--3"><label for="l-price">Rate</label>
+              <input class="in in--sm" id="l-price" name="unit_price" type="number" step="0.01" required></div>
+            <div class="fi fi--2"><label for="l-disc">Disc %</label>
+              <input class="in in--sm" id="l-disc" name="discount_pct" type="number" step="0.01" value="0"></div>
+            {% if gst %}
+            <div class="fi fi--3"><label for="l-tax">GST %</label>
+              <input class="in in--sm" id="l-tax" name="tax_rate" type="number" step="0.01"
+                     value="{{ tax_rate }}"></div>
+            {% endif %}
+          </div>
+          <button class="b b--sm" type="submit">Add the line</button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+
+    <!-- ── payments ───────────────────────────────────────────────────────── -->
+    <div class="pan__h">{{ ico('receipt') }} <h2>Payments</h2></div>
+    <div class="pan__b pan__b--flush">
+      {% if paymentz %}
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in paymentz %}
+          <tr class="{{ 'is-void' if row.voided_at }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.payment_detail', payment_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.paid_on | date_fmt('%d %b %Y') }} &middot; {{ row.method }}
+                {%- if row.reference %} &middot; {{ row.reference }}{% endif %}</span>
+            </td>
+            <td class="num">
+              {{ row.amount | money }}
+              {% if row.tds_amount %}<span class="sub">+ {{ row.tds_amount | money }} TDS</span>{% endif %}
+            </td>
+            <td class="num">
+              {% if row.voided_at %}{{ badge('void', 'mute') }}{% endif %}
+              <a class="ib" title="Receipt PDF" target="_blank" rel="noopener"
+                 href="{{ url_for('admin.receipt_pdf', payment_id=row.id) }}">{{ ico('doc') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing received yet.</p>
+      {% endif %}
+    </div>
+
+    {% if invoice.balance > 0 and invoice.status != 'draft' %}
+    <div class="pan__b">
+      <h3 class="sub-h">Record a payment</h3>
+      <form method="post" action="{{ url_for('admin.payment_new') }}" data-pay="{{ invoice.balance }}">
+        {{ csrf() }}
+        <input type="hidden" name="invoice_id" value="{{ invoice.id }}">
+        <input type="hidden" name="client_id" value="{{ client.id }}">
+        <div class="grid">
+          <div class="fi fi--3">
+            <label for="p-amount">Amount</label>
+            <div class="wrapin">
+              <span class="fix">&#8377;</span>
+              <input class="in" id="p-amount" name="amount" type="number" step="0.01" required>
+            </div>
+            <span class="hint">Balance is {{ invoice.balance | money }}.</span>
+          </div>
+          <div class="fi fi--3">
+            <label for="p-method">How</label>
+            <select class="in" id="p-method" name="method">
+              {% for method in methods %}<option value="{{ method }}">{{ method }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="fi fi--3">
+            <label for="p-ref">Reference</label>
+            <input class="in" id="p-ref" name="reference" placeholder="UTR, cheque no, UPI ref">
+            <span class="hint">Worth having when a client says they paid.</span>
+          </div>
+          <div class="fi fi--3">
+            <label for="p-date">Paid on</label>
+            <input class="in" id="p-date" name="paid_on" type="date" value="{{ today }}">
+          </div>
+          <div class="fi fi--3">
+            <label for="p-tds">TDS deducted</label>
+            <div class="wrapin">
+              <span class="fix">&#8377;</span>
+              <input class="in" id="p-tds" name="tds_amount" type="number" step="0.01" value="0">
+            </div>
+            <span class="hint">A company client keeps back 10% under 194J. Record it here and the
+              invoice still closes, because it was paid - just to the government.</span>
+          </div>
+          <div class="fi fi--9">
+            <label for="p-note">Note</label>
+            <input class="in" id="p-note" name="notes">
+          </div>
+        </div>
+        <p class="note note--warn" data-pay-warn hidden>
+          That is more than the balance. Either it is an advance against something else, or the
+          figure is wrong.
+        </p>
+        <button class="b" type="submit">{{ ico('receipt') }} Record it and make a receipt</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if credits %}
+    <div class="pan__h">{{ ico('minus') }} <h2>Credit notes</h2></div>
+    <div class="pan__b pan__b--flush">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in credits %}
+          <tr>
+            <td>{{ row.ref }}<span class="sub">{{ row.reason }}</span></td>
+            <td class="num">&minus;{{ row.amount | money }}</td>
+            <td class="num"><a class="ib" target="_blank" rel="noopener"
+              href="{{ url_for('admin.credit_note_pdf', note_id=row.id) }}">{{ ico('doc') }}</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ── the side rail ────────────────────────────────────────────────────── -->
+  <section class="pan pan--4">
+    <div class="pan__h">{{ ico('briefcase') }} <h2>Billed to</h2></div>
+    <div class="pan__b">
+      <p><b><a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.legal_name or client.name }}</a></b></p>
+      {% if client.billing_address %}
+      <p class="sub">{{ client.billing_address | replace('\n', ', ') }}</p>
+      {% endif %}
+      <dl class="dl dl--tight">
+        {% if client.gstin %}<dt>GSTIN</dt><dd class="mono">{{ client.gstin }}</dd>{% endif %}
+        <dt>Place of supply</dt><dd>{{ invoice.place_of_supply or '—' }}</dd>
+        <dt>Supply</dt>
+        <dd>{{ 'Inter-state, IGST' if invoice.supply_type == 'inter' else 'Intra-state, CGST + SGST' }}</dd>
+        {% if project %}
+        <dt>Project</dt>
+        <dd><a href="{{ url_for('admin.project_detail', project_id=project.id) }}">{{ project.name }}</a></dd>
+        {% endif %}
+        {% if invoice.quote_id %}
+        <dt>From quote</dt>
+        <dd><a href="{{ url_for('admin.quote_detail', quote_id=invoice.quote_id) }}">open it</a></dd>
+        {% endif %}
+      </dl>
+    </div>
+
+    <div class="pan__h">{{ ico('pen') }} <h2>Edit</h2></div>
+    <div class="pan__b">
+      <form method="post" data-guard>
+        {{ csrf() }}
+        <div class="grid">
+          {% if invoice.status == 'draft' %}
+          <div class="fi fi--12">
+            <label for="issued_on">Issue date</label>
+            <input class="in in--sm" id="issued_on" name="issued_on" type="date" value="{{ invoice.issued_on }}">
+          </div>
+          {% endif %}
+          <div class="fi fi--12">
+            <label for="due_on">Due date</label>
+            <input class="in in--sm" id="due_on" name="due_on" type="date" value="{{ invoice.due_on }}">
+          </div>
+          <div class="fi fi--12">
+            <label for="notes">Notes</label>
+            <textarea class="in in--sm" id="notes" name="notes" rows="3">{{ invoice.notes }}</textarea>
+          </div>
+          <div class="fi fi--12">
+            <label for="terms">Footer</label>
+            <textarea class="in in--sm" id="terms" name="terms" rows="3">{{ invoice.terms }}</textarea>
+          </div>
+        </div>
+        <button class="b b--sm" type="submit">{{ ico('save') }} Save</button>
+      </form>
+    </div>
+
+    {% if invoice.balance and invoice.status != 'draft' %}
+    <div class="pan__h">{{ ico('warn') }} <h2>Chasing it</h2></div>
+    <div class="pan__b">
+      <p class="hint">The ladder below is what the reminder text follows. Logging a reminder
+        moves it on a step, so you never send the same message twice.</p>
+      <ol class="ladder">
+        {% for days, code, label in ladder %}
+        <li class="{{ 'is-on' if dunning and dunning[1] == code }}
+                   {{ 'is-done' if days <= invoice.dunning_stage and invoice.last_reminder_at }}">
+          <span>{{ label }}</span><em>{{ days }}d</em>
+        </li>
+        {% endfor %}
+      </ol>
+      <form method="post" action="{{ url_for('admin.invoice_reminded', invoice_id=invoice.id) }}">
+        {{ csrf() }}
+        <input type="hidden" name="stage" value="{{ dunning[0] if dunning else 0 }}">
+        <button class="b b--sm b--ghost" type="submit">{{ ico('check') }} I have reminded them</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if can('money') and invoice.status not in ('draft', 'cancelled') %}
+    <div class="pan__f">
+      <h3 class="sub-h">Corrections</h3>
+      <p class="hint">An issued invoice is never edited or deleted. These are the honest ways to
+        change what is owed, and each one leaves its own record.</p>
+
+      <details class="adder">
+        <summary>{{ ico('minus') }} Raise a credit note</summary>
+        <form method="post" action="{{ url_for('admin.invoice_credit', invoice_id=invoice.id) }}">
+          {{ csrf() }}
+          <div class="fi fi--12"><label for="cn-amount">Amount</label>
+            <input class="in in--sm" id="cn-amount" name="amount" type="number" step="0.01" required></div>
+          <div class="fi fi--12"><label for="cn-reason">Reason</label>
+            <input class="in in--sm" id="cn-reason" name="reason" required
+                   placeholder="Overcharged for two pages that were dropped"></div>
+          <button class="b b--sm" type="submit">Raise it</button>
+        </form>
+      </details>
+
+      <details class="adder">
+        <summary>{{ ico('warn') }} Write off the balance</summary>
+        <form method="post" action="{{ url_for('admin.invoice_writeoff', invoice_id=invoice.id) }}"
+              data-confirm="Write this off? It stops appearing in receivables and stays on the record as a loss.">
+          {{ csrf() }}
+          <div class="fi fi--12"><label for="wo-amount">Amount</label>
+            <input class="in in--sm" id="wo-amount" name="amount" type="number" step="0.01"
+                   value="{{ invoice.balance | round(2) }}" required></div>
+          <div class="fi fi--12"><label for="wo-reason">Reason</label>
+            <input class="in in--sm" id="wo-reason" name="reason" required
+                   placeholder="Client wound up; not recoverable"></div>
+          <button class="b b--sm b--danger" type="submit">Write it off</button>
+        </form>
+      </details>
+
+      <details class="adder">
+        <summary>{{ ico('trash') }} Cancel the invoice</summary>
+        <form method="post" action="{{ url_for('admin.invoice_cancel', invoice_id=invoice.id) }}"
+              data-confirm="Cancel this invoice? The number stays used so the series has no gap.">
+          {{ csrf() }}
+          <div class="fi fi--12"><label for="cx-reason">Reason</label>
+            <input class="in in--sm" id="cx-reason" name="reason" required
+                   placeholder="Raised against the wrong client"></div>
+          <button class="b b--sm b--danger" type="submit">Cancel it</button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{% endblock %}

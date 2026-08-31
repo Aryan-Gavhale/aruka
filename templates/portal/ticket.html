@@ -1,0 +1,112 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# One request and its conversation. Internal notes are filtered out in the route, not
+   here, so a template mistake cannot leak them. #}
+
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('portal.tickets_list') }}">Support</a>
+  <span aria-hidden="true">/</span><span>{{ ticket.ref }}</span>
+</nav>
+
+<div class="phead">
+  <div>
+    <span class="eye">{{ ticket.ref }}</span>
+    <h1>{{ ticket.subject }}</h1>
+    <p class="pitem__m">
+      <span class="chip chip--{{ ticket.status }}">
+        {{ statuses.get(ticket.status, ticket.status) }}</span>
+      <span class="chip chip--{{ ticket.priority }}">{{ priorities.get(ticket.priority) }}</span>
+      <span class="chip">{{ categories.get(ticket.category, ticket.category) }}</span>
+      {% if ticket.is_change_request %}<span class="chip chip--warn">Change request</span>{% endif %}
+    </p>
+  </div>
+  {% if ticket.status in ('open', 'in_progress', 'waiting_client', 'resolved') %}
+  <form method="post" action="{{ url_for('portal.ticket_close', ticket_id=ticket.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn--ghost btn--sm" type="submit"
+            data-confirm="Close this request? You can always raise a new one.">
+      {{ ico('check') }} This is sorted</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if ticket.status == 'waiting_client' %}
+<div class="banner banner--warn">
+  {{ ico('chat') }}
+  <span><b>We are waiting on you.</b> Read the last reply below and add whatever it asks
+    for — the clock on our side is paused until you do.</span>
+</div>
+{% elif ticket.status == 'resolved' %}
+<div class="banner banner--ok">
+  {{ ico('check') }}
+  <span><b>We think this is fixed.</b> Have a look and close it if you agree. If it is not
+    right, reply below and it reopens.</span>
+</div>
+{% endif %}
+
+<dl class="dl pmeta">
+  <dt>Raised</dt><dd>{{ ticket.created_at | datetime_fmt }}</dd>
+  {% if ticket.first_response_at %}
+  <dt>First reply</dt><dd>{{ ticket.first_response_at | datetime_fmt }}</dd>
+  {% elif ticket.response_due_at %}
+  <dt>Reply promised by</dt><dd>{{ ticket.response_due_at | datetime_fmt }}</dd>
+  {% endif %}
+  {% if ticket.resolved_at %}
+  <dt>Resolved</dt><dd>{{ ticket.resolved_at | datetime_fmt }}</dd>
+  {% elif ticket.resolve_due_at and state.resolve.state != 'paused' %}
+  <dt>Fix aimed at</dt><dd>{{ ticket.resolve_due_at | datetime_fmt }}</dd>
+  {% endif %}
+  {% if ticket.closed_at %}<dt>Closed</dt><dd>{{ ticket.closed_at | datetime_fmt }}</dd>{% endif %}
+</dl>
+
+{# ── the conversation ─────────────────────────────────────────────────────── #}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('chat') }} Conversation</h2></div>
+
+  <ol class="thread">
+    <li class="msg msg--them">
+      <div class="msg__h">
+        <b>{{ ticket.contact_name or 'You' }}</b>
+        <span>{{ ticket.created_at | datetime_fmt }}</span>
+      </div>
+      <div class="msg__b prose">
+        {% if ticket.body %}{{ ticket.body | md_lite }}{% else %}<p class="muted">No detail
+        given beyond the subject.</p>{% endif %}
+      </div>
+    </li>
+
+    {% for row in thread %}
+    <li class="msg {{ 'msg--them' if row.author_kind == 'client' else 'msg--us' }}">
+      <div class="msg__h">
+        <b>{{ row.author_name or (brand_name if row.author_kind != 'client' else 'You') }}</b>
+        <span>{{ row.created_at | datetime_fmt }}</span>
+      </div>
+      <div class="msg__b prose">{{ row.body | md_lite }}</div>
+      {% if row.media_id %}
+      <a class="small" href="{{ media_url(row.media_id) }}" target="_blank" rel="noopener">
+        {{ ico('download') }} {{ media_alt(row.media_id) or 'Attachment' }}</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+
+  {% if ticket.status != 'closed' %}
+  <form class="f preply" method="post"
+        action="{{ url_for('portal.ticket', ticket_id=ticket.id) }}" data-once>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="fi">
+      <label for="f-body">Add a reply</label>
+      <textarea class="in" id="f-body" name="body" rows="4" required
+                placeholder="Anything that helps — a URL, a time, what you were doing."></textarea>
+    </div>
+    <button class="btn" type="submit" data-busy="Sending&hellip;">
+      {{ ico('arrow') }} Send</button>
+  </form>
+  {% else %}
+  <p class="empty">This one is closed. <a href="{{ url_for('portal.ticket_new') }}">Raise a
+    new request</a> if it comes back.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ back }}">{{ name or 'Back' }}</a> &rsaquo; WhatsApp
+  &rsaquo; <span class="muted">{{ provider.label }}</span>
+</p>
+{% endblock %}
+
+{% block content %}
+
+{% if not number %}
+<div class="note note--bad">
+  <b>No number on this record.</b> Add a phone or WhatsApp number first, or type one below -
+  it will be used for this message only.
+</div>
+{% elif blocked %}
+<div class="note note--bad">
+  <b>+{{ number | wa }} has opted out of WhatsApp.</b> Only override this if they have since
+  asked you to message them again.
+</div>
+{% endif %}
+
+<div class="grid">
+  <form class="pan pan--7" method="post" data-wa-form
+        data-preview-url="{{ url_for('admin.wa_preview') }}"
+        data-values="{{ values | tojson }}"
+        action="{{ url_for('admin.wa_compose', kind=kind, target_id=row.id) }}">
+    {{ csrf() }}
+    <h2 class="pan__h">{{ ico('whatsapp') }} To {{ name or 'this contact' }}</h2>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--6">
+          <label for="number">Number</label>
+          <input class="in" id="number" name="number" value="{{ number }}"
+                 placeholder="98765 43210">
+          <span class="hint">A 10-digit number gets +{{ S('whatsapp.default_country_code') }}
+            in front of it.</span>
+        </div>
+
+        <div class="fi fi--6">
+          <label for="template_id">Start from a template</label>
+          <select class="in" id="template_id" name="template_id" data-wa-template>
+            <option value="">Write it myself</option>
+            {% for group_code, group_label in categories.items() %}
+              {% set group_rows = templates | selectattr('category', 'equalto', group_code) | list %}
+              {% if group_rows %}
+              <optgroup label="{{ group_label }}{{ ' - suggested' if group_code == suggested else '' }}">
+                {% for template in group_rows %}
+                <option value="{{ template.id }}">{{ template.name }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <span class="hint">
+            {% if templates %}Picking one fills the box below with this contact's details already
+            substituted.{% else %}
+            No templates yet - <a href="{{ url_for('admin.wa_templates_new') }}">write your
+            first</a>.{% endif %}
+          </span>
+        </div>
+
+        <div class="fi fi--12">
+          <label for="body">Message <em>*</em></label>
+          <textarea class="in" id="body" name="body" rows="10" required data-wa-body></textarea>
+          <span class="hint">
+            <span data-wa-count>0</span> characters.
+            <span data-wa-missing class="is-warn"></span>
+          </span>
+        </div>
+
+        {% if blocked %}
+        <div class="fi fi--12">
+          <label class="sw">
+            <input type="checkbox" name="override_optout" value="1">
+            <span class="sw__t"></span>
+            <span class="sw__l">Send anyway
+              <span>They asked to be left alone. Only tick this if that changed.</span></span>
+          </label>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="pan__f">
+      <button class="b b--wa" type="submit">
+        {{ ico('whatsapp') }}
+        {% if provider.sends_itself %}Send now{% else %}Prepare and open WhatsApp{% endif %}
+      </button>
+      <a class="b b--ghost" href="{{ back }}">Cancel</a>
+      <span class="spacer"></span>
+      <span class="hint">
+        {% if provider.sends_itself %}
+        Goes out through the Cloud API and appears in the log with a delivery status.
+        {% else %}
+        Nothing is sent from the server. WhatsApp opens with the text ready and you press send.
+        {% endif %}
+      </span>
+    </div>
+  </form>
+
+  <div class="pan pan--5">
+    <h2 class="pan__h">{{ ico('tag') }} What the placeholders will become</h2>
+    <div class="pan__b">
+      <dl class="dl dl--tight">
+        {% for key, value in values | dictsort %}
+        {% if value %}
+        <dt><code>{{ '{{ ' ~ key ~ ' }}' }}</code></dt>
+        <dd>{{ value | shorten(70) }}</dd>
+        {% endif %}
+        {% endfor %}
+      </dl>
+      <p class="hint">Anything not on this list stays visible in the message, so a half-filled
+      template is obvious before you send it.</p>
+    </div>
+
+    {% if history %}
+    <h2 class="pan__h">{{ ico('clock') }} Already said</h2>
+    <div class="pan__b">
+      <ul class="msgs">
+        {% for message in history %}
+        <li class="msg msg--{{ message.direction }}">
+          <p>{{ message.body | shorten(200) }}</p>
+          <span class="msg__m">
+            {{ message.created_at | ago }} &middot;
+            {{ labels.get(message.status, message.status) }}
+            {% if message.direction == 'in' %} &middot; from them{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

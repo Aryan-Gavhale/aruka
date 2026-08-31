@@ -1,0 +1,187 @@
+{# One macro renders every admin input, so a new field kind is one edit here. #}
+{% from "admin/_icons.html" import ico %}
+
+{% macro field(f, value, id_prefix='') %}
+{% set fid = (id_prefix ~ f.name) | replace('.', '-') | replace(' ', '-') %}
+{% if f.kind == 'heading' %}
+<div class="fi fi--12 fhead">
+  <h3>{{ f.label }}</h3>
+  {% if f.help %}<span class="hint">{{ f.help }}</span>{% endif %}
+</div>
+{% else %}
+<div class="fi fi--{{ f.span }}">
+  {% if f.kind not in ('checkbox', 'bool', 'hidden') %}
+  <label for="{{ fid }}">{{ f.label }}{% if f.required %} <em>*</em>{% endif %}</label>
+  {% endif %}
+
+  {% if f.kind in ('text', 'email', 'tel', 'url', 'slug', 'date', 'time') %}
+    {% set itype = 'date' if f.kind == 'date' else ('time' if f.kind == 'time' else ('email' if f.kind == 'email' else ('tel' if f.kind == 'tel' else 'text'))) %}
+    <input class="in" id="{{ fid }}" name="{{ f.name }}" type="{{ itype }}"
+           value="{{ value if value is not none else '' }}"
+           placeholder="{{ f.placeholder }}" {{ 'required' if f.required }}>
+
+  {% elif f.kind == 'hidden' %}
+    <input type="hidden" id="{{ fid }}" name="{{ f.name }}" value="{{ value or '' }}">
+
+  {% elif f.kind == 'csv' %}
+    <input class="in" id="{{ fid }}" name="{{ f.name }}" value="{{ value or '' }}"
+           placeholder="{{ f.placeholder or 'One, two, three' }}">
+
+  {% elif f.kind == 'textarea' %}
+    <textarea class="in" id="{{ fid }}" name="{{ f.name }}" rows="{{ f.rows }}"
+              placeholder="{{ f.placeholder }}" {{ 'required' if f.required }}>{{ value or '' }}</textarea>
+
+  {% elif f.kind == 'lines' %}
+    <textarea class="in in--code" id="{{ fid }}" name="{{ f.name }}" rows="{{ f.rows }}"
+              placeholder="{{ f.placeholder or (f.line_keys | join(' | ') if f.line_keys) }}">{{ value or '' }}</textarea>
+
+  {% elif f.kind in ('number', 'money', 'float', 'int', 'integer') %}
+    {% set prefix = f.prefix or ('\u20b9' if f.kind == 'money' else '') %}
+    {% if prefix or f.suffix %}
+    <div class="wrapin">
+      {% if prefix %}<span class="fix">{{ prefix }}</span>{% endif %}
+      <input class="in" id="{{ fid }}" name="{{ f.name }}" type="number"
+             step="{{ '1' if f.kind in ('int', 'integer') else f.step }}"
+             value="{{ value if value not in (none, '') else '' }}" {{ 'required' if f.required }}>
+      {% if f.suffix %}<span class="fix">{{ f.suffix }}</span>{% endif %}
+    </div>
+    {% else %}
+    <input class="in" id="{{ fid }}" name="{{ f.name }}" type="number"
+           step="{{ '1' if f.kind in ('int', 'integer') else f.step }}"
+           value="{{ value if value not in (none, '') else '' }}" {{ 'required' if f.required }}>
+    {% endif %}
+
+  {% elif f.kind in ('checkbox', 'bool') %}
+    <label class="sw">
+      <input type="checkbox" id="{{ fid }}" name="{{ f.name }}" value="1" {{ 'checked' if value }}>
+      <span class="sw__t"></span>
+      <span class="sw__l">{{ f.label }}{% if f.help %}<span>{{ f.help }}</span>{% endif %}</span>
+    </label>
+
+  {% elif f.kind == 'select' %}
+    <select class="in" id="{{ fid }}" name="{{ f.name }}">
+      {% for option_value, option_label in f.choices() %}
+      <option value="{{ option_value }}"
+        {{ 'selected' if (value | string) == (option_value | string) }}>{{ option_label }}</option>
+      {% endfor %}
+    </select>
+
+  {% elif f.kind == 'color' %}
+    <div class="colour">
+      <input type="color" value="{{ value or '#7C5CFF' }}" data-colour-for="{{ fid }}"
+             aria-label="{{ f.label }} colour picker">
+      <input class="in" id="{{ fid }}" name="{{ f.name }}" value="{{ value or '' }}" maxlength="9">
+    </div>
+
+  {% elif f.kind == 'media' %}
+    {% set m = media_row(value) %}
+    <div class="pick" data-pick>
+      <div class="pick__pv" data-pick-preview>
+        {% if m %}<img src="{{ media_url(m, 'thumb') }}" alt="">{% else %}No image{% endif %}
+      </div>
+      <div class="pick__side">
+        <input type="hidden" id="{{ fid }}" name="{{ f.name }}" value="{{ value or '' }}" data-pick-input>
+        <div class="row" style="gap:6px">
+          <button class="b b--sm" type="button" data-pick-open>{{ ico('image') }} Choose</button>
+          <button class="b b--sm b--ghost" type="button" data-pick-clear>Clear</button>
+        </div>
+        <span class="pick__meta" data-pick-meta>
+          {% if m %}#{{ m.id }} &middot; {{ m.alt or m.title or 'no alt text' }}{% else %}Nothing selected{% endif %}
+        </span>
+      </div>
+    </div>
+
+  {% elif f.kind == 'secret' %}
+    <input class="in" id="{{ fid }}" name="{{ f.name }}" type="password"
+           value="{{ value or '' }}" autocomplete="new-password" placeholder="{{ f.placeholder }}">
+
+  {% else %}
+    <input class="in" id="{{ fid }}" name="{{ f.name }}" value="{{ value or '' }}">
+  {% endif %}
+
+  {% if f.help and f.kind not in ('checkbox', 'bool') %}<span class="hint">{{ f.help }}</span>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro fields(list_of_fields, row, blob={}, id_prefix='') %}
+{% for f in list_of_fields %}
+  {% if not f.owner_only or is_owner() %}
+  {{ field(f, field_value(f, blob if f.json else row), id_prefix) }}
+  {% endif %}
+{% endfor %}
+{% endmacro %}
+
+
+{% macro badge(text, tone='') %}
+<span class="bg {{ 'bg--' ~ tone if tone }}">{{ text }}</span>
+{% endmacro %}
+
+
+{% macro csrf() %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% endmacro %}
+
+
+{% macro copy_btn(value, title='Copy') %}
+<button class="ib" type="button" data-copy="{{ value }}" title="{{ title }}">{{ ico('copy') }}</button>
+{% endmacro %}
+
+
+{% macro kpi(label, value, sub='', tone='') %}
+<div class="kpi {{ 'kpi--' ~ tone if tone }}">
+  <span class="kpi__l">{{ label }}</span>
+  <span class="kpi__v">{{ value }}</span>
+  {% if sub %}<span class="kpi__s">{{ sub }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro bar(label, value, max_value, display='', tone='') %}
+<div class="bar">
+  <span class="bar__l" title="{{ label }}">{{ label }}</span>
+  <span class="bar__t">
+    <span class="bar__f {{ 'bar__f--' ~ tone if tone }}"
+          style="width: {{ ((value / max_value * 100) if max_value else 0) | round(1) }}%"></span>
+  </span>
+  <span class="bar__v">{{ display or value }}</span>
+</div>
+{% endmacro %}
+
+
+{% macro sla_pill(state) %}
+{% set labels = {'on_time': 'On time', 'at_risk': 'At risk', 'breached': 'Breached',
+                 'paused': 'Paused', 'met': 'Met'} %}
+<span class="sla sla--{{ state }}"><span class="sla__d"></span>{{ labels.get(state, state) }}</span>
+{% endmacro %}
+
+
+{% macro stage_badge(stage) %}
+{% set tones = {'new': 'info', 'contacted': 'info', 'qualified': 'brand', 'quoted': 'brand',
+                'negotiation': 'warn', 'won': 'good', 'lost': 'bad', 'dormant': 'mute'} %}
+{{ badge(STAGE_LABELS.get(stage, stage), tones.get(stage, '')) }}
+{% endmacro %}
+
+
+{% macro invoice_badge(status) %}
+{% set tones = {'draft': 'mute', 'sent': 'info', 'part_paid': 'warn', 'paid': 'good',
+                'overdue': 'bad', 'written_off': 'mute', 'cancelled': 'mute'} %}
+{{ badge(INVOICE_STATUS_LABELS.get(status, status), tones.get(status, '')) }}
+{% endmacro %}
+
+
+{# The panel never links straight to wa.me: it goes through the composer so the
+   message is templated, filled from the record and written to the log. #}
+{% macro wa_button(number, kind, target_id, opt_out=false, label='') %}
+{% if opt_out %}
+<span class="ib is-off" title="This contact has asked not to be messaged">{{ ico('whatsapp') }}</span>
+{% elif number %}
+<a class="{{ 'b b--sm b--wa' if label else 'ib' }}" title="Send WhatsApp"
+   href="{{ url_for('admin.wa_compose', kind=kind, target_id=target_id) }}">
+  {{ ico('whatsapp') }}{% if label %} {{ label }}{% endif %}
+</a>
+{% else %}
+<span class="ib is-off" title="No WhatsApp number on file">{{ ico('whatsapp') }}</span>
+{% endif %}
+{% endmacro %}

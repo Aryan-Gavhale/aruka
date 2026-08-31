@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, stage_badge, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_board') }}">{{ ico('board') }} Board</a>
+<form method="post" action="{{ url_for('admin.leads_sweep') }}"
+      data-confirm="Move every quiet lead to dormant?">
+  {{ csrf() }}
+  <button class="b b--sm b--ghost" type="submit">{{ ico('refresh') }} Sweep the quiet ones</button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Overdue', overdue | length, 'Past the date you set', 'bad' if overdue else 'good') }}
+  {{ kpi('Due today', due | length, 'Still inside the day', 'warn' if due else '') }}
+  {{ kpi('Going quiet', quiet | length,
+         'No contact in ' ~ S('crm.dormant_after_days') ~ ' days, no date booked') }}
+</div>
+
+{% macro queue(rows, icon_name, heading, tone, empty) %}
+<section class="pan pan--12">
+  <h2 class="pan__h {{ 'is-' ~ tone if tone }}">
+    {{ ico(icon_name) }} {{ heading }} <span class="pan__n">{{ rows | length }}</span>
+  </h2>
+  <div class="pan__b">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Lead</th><th>Stage</th><th class="num">Value</th>
+            <th>Due</th><th>Note</th><th>Last contact</th><th class="act">Do something</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lead in rows %}
+          <tr>
+            <td>
+              <a class="strong" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>
+              <span class="sub">{{ lead.ref }}{% if lead.company %} &middot; {{ lead.company }}{% endif %}</span>
+            </td>
+            <td>{{ stage_badge(lead.stage) }}</td>
+            <td class="num">{{ lead.quote_value | money if lead.quote_value else '-' }}</td>
+            <td>
+              {% if lead.next_followup_on %}
+                {% set gap = lead.next_followup_on | days_until %}
+                <span class="{{ 'is-bad' if gap is not none and gap < 0 }}">
+                  {{ lead.next_followup_on | date_fmt('%d %b') }}
+                </span>
+                {% if gap is not none and gap < 0 %}<span class="sub">{{ -gap }} day(s) late</span>{% endif %}
+              {% else %}
+                <span class="muted">none booked</span>
+              {% endif %}
+            </td>
+            <td>{{ lead.followup_note | shorten(60) if lead.followup_note else '-' }}</td>
+            <td>{{ lead.last_contact_at | ago if lead.last_contact_at else 'never' }}</td>
+            <td class="act">
+              {% if lead.whatsapp or lead.phone %}
+              <a class="ib" title="Send WhatsApp"
+                 href="{{ url_for('admin.wa_compose', kind='lead', target_id=lead.id) }}">{{ ico('whatsapp') }}</a>
+              {% endif %}
+              {% if lead.phone %}
+              <a class="ib" title="Call" href="tel:{{ lead.phone }}">{{ ico('phone') }}</a>
+              {% endif %}
+              <form method="post" action="{{ url_for('admin.lead_snooze', lead_id=lead.id) }}">
+                {{ csrf() }}
+                <button class="ib" type="submit" name="days" value="3" title="Push out 3 days">
+                  {{ ico('clock') }}
+                </button>
+              </form>
+              <a class="ib" title="Open" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ ico('pen') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">{{ empty }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+<div class="grid">
+  {{ queue(overdue, 'warn', 'Overdue', 'bad', 'Nothing is late. Rare and good.') }}
+  {{ queue(due, 'calendar', 'Due today', 'warn', 'Nothing due today.') }}
+  {{ queue(quiet, 'clock', 'Going quiet', '',
+           'Every open lead has either been contacted recently or has a date booked.') }}
+</div>
+
+<div class="note">
+  <b>Sweeping</b> moves anything in the going-quiet list to dormant, with a timeline entry
+  saying why. It never deletes and never touches a lead with a follow-up date, so the board
+  shows what is actually being worked rather than everything you ever received.
+</div>
+
+{% if templates %}
+<p class="hint">
+  {{ templates | length }} WhatsApp template(s) ready. The compose screen picks a sensible one
+  based on where the lead is.
+</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Setup &middot; step {{ index + 1 }} of {{ steps | length }}</p>
+{% endblock %}
+
+{% block content %}
+
+<ol class="steps">
+  {% for code, label in steps %}
+  <li class="step {{ 'is-on' if loop.index0 == index }} {{ 'is-done' if loop.index0 < index }}">
+    <a href="{{ url_for('admin.onboarding', step=code) }}">
+      <span class="step__n">{{ loop.index }}</span>
+      <span class="step__l">{{ label }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+
+<div class="note note--info">
+  These are the details that end up printed on documents, so it is worth getting them right
+  once. Nothing here is locked afterwards - everything is editable in Settings, and you can
+  skip a step and come back.
+</div>
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  <div class="pan pan--narrow">
+    <div class="pan__h">
+      {{ ico('sliders') }} <h2>{{ steps[index][1] }}</h2>
+    </div>
+    <div class="pan__b">
+      <div class="grid">
+        {% for f in fields %}
+        {% set fid = f.key | replace('.', '-') %}
+        <div class="fi {{ 'fi--12' if f.kind == 'textarea' else 'fi--6' }}">
+          <label for="{{ fid }}">{{ f.label }}</label>
+
+          {% if f.kind == 'textarea' %}
+            <textarea class="in" id="{{ fid }}" name="{{ f.key }}" rows="3">{{ f.value or '' }}</textarea>
+
+          {% elif f.kind == 'select' %}
+            <select class="in" id="{{ fid }}" name="{{ f.key }}">
+              {% for value, label in f.options %}
+              <option value="{{ value }}" {{ 'selected' if f.value == value }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+
+          {% elif f.kind == 'money' %}
+            <div class="wrapin">
+              <span class="fix">&#8377;</span>
+              <input class="in" id="{{ fid }}" name="{{ f.key }}" type="number" step="1"
+                     value="{{ f.value or '' }}">
+            </div>
+
+          {% elif f.kind in ('int', 'number') %}
+            <input class="in" id="{{ fid }}" name="{{ f.key }}" type="number"
+                   step="{{ '1' if f.kind == 'int' else '0.1' }}" value="{{ f.value or '' }}">
+
+          {% elif f.kind == 'media' %}
+            {% set m = media_row(f.value) %}
+            <div class="pick" data-pick>
+              <div class="pick__pv" data-pick-preview>
+                {% if m %}<img src="{{ media_url(m, 'thumb') }}" alt="">{% else %}No image{% endif %}
+              </div>
+              <div class="pick__side">
+                <input type="hidden" id="{{ fid }}" name="{{ f.key }}" value="{{ f.value or '' }}"
+                       data-pick-input>
+                <div class="row" style="gap:6px">
+                  <button class="b b--sm b--plain" type="button" data-pick-open>{{ ico('image') }} Choose</button>
+                  <button class="b b--sm b--ghost" type="button" data-pick-clear>Clear</button>
+                </div>
+                <span class="pick__meta" data-pick-meta>
+                  {% if m %}#{{ m.id }}{% else %}Nothing selected{% endif %}
+                </span>
+              </div>
+            </div>
+
+          {% else %}
+            <input class="in" id="{{ fid }}" name="{{ f.key }}"
+                   type="{{ 'email' if f.kind == 'email' else ('tel' if f.kind == 'tel' else 'text') }}"
+                   value="{{ f.value or '' }}">
+          {% endif %}
+
+          {% if f.help %}<span class="hint">{{ f.help }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">
+      {% if next_label %}Save and continue to {{ next_label | lower }}{% else %}Finish setup{% endif %}
+      {{ ico('arrow-right') }}
+    </button>
+    {% if index > 0 %}
+    <a class="b b--ghost" href="{{ url_for('admin.onboarding', step=steps[index - 1][0]) }}">Back</a>
+    {% endif %}
+    <span class="spacer"></span>
+    <a class="b b--plain" href="{{ url_for('admin.dashboard') }}">Skip for now</a>
+  </div>
+</form>
+
+{% endblock %}

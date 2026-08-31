@@ -1,0 +1,128 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.wa_log') }}">{{ ico('list') }} Log</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.wa_templates_list') }}">{{ ico('note') }} Templates</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="note {{ 'note--warn' if not provider.sends_itself }}">
+  {% if provider.sends_itself %}
+  <b>The Cloud API is on.</b> A run actually sends, {{ limit }} at a time, so you can stop
+  between batches if something looks wrong.
+  {% else %}
+  <b>You are on click-to-chat, so nothing sends by itself.</b> Queueing builds a worklist with
+  every message pre-written and personalised; you then open them one at a time. Slower than a
+  blast, and the reason your number is still alive.
+  {% endif %}
+</div>
+
+<div class="grid">
+  <form class="pan pan--7" method="post" action="{{ url_for('admin.wa_bulk') }}">
+    {{ csrf() }}
+    <h2 class="pan__h">{{ ico('users') }} Queue a message</h2>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--12">
+          <label for="template_id">Template <em>*</em></label>
+          <select class="in" id="template_id" name="template_id" required>
+            <option value="">Choose one</option>
+            {% for template in templates %}
+            <option value="{{ template.id }}">{{ template.name }}</option>
+            {% endfor %}
+          </select>
+          {% if not templates %}
+          <span class="hint">No active templates.
+            <a href="{{ url_for('admin.wa_templates_new') }}">Write one first</a> - bulk sending
+            without a template means typing the same message a hundred times.</span>
+          {% endif %}
+        </div>
+
+        <div class="fi fi--6">
+          <label for="audience">Who gets it</label>
+          <select class="in" id="audience" name="audience" data-bulk-audience>
+            {% for code, label in audiences.items() %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fi fi--6" data-bulk-stage>
+          <label for="stage">Which stage</label>
+          <select class="in" id="stage" name="stage">
+            {% for row in stages %}
+            <option value="{{ row.code }}" {{ 'selected' if row.code == 'new' }}>{{ row.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">Capped at the newest 300, and spam is excluded.</span>
+        </div>
+      </div>
+    </div>
+    <div class="pan__f">
+      <button class="b" type="submit">{{ ico('check') }} Build the queue</button>
+      <span class="spacer"></span>
+      <span class="hint">Anyone with no number, or on the opt-out list, is skipped and counted.</span>
+    </div>
+  </form>
+
+  <section class="pan pan--5">
+    <h2 class="pan__h">{{ ico('shield') }} Before you do this</h2>
+    <div class="pan__b">
+      <p>Bulk messaging on WhatsApp is not email. People report it, and reports get numbers
+      banned - including the one on your invoices and your website.</p>
+      <ul class="lst lst--plain">
+        <li>Message people who asked you something, not a bought list.</li>
+        <li>Say who you are in the first line. A template with
+          <code>{{ '{{ brand }}' }}</code> in it does that for you.</li>
+        <li>Honour an opt-out the moment you get one -
+          <a href="{{ url_for('admin.optouts_list') }}">the list</a> is checked on every send,
+          bulk or single.</li>
+        <li>Keep runs small. {{ limit }} at a time is the default here for that reason.</li>
+      </ul>
+      <p class="hint">The daily cap and throttle in
+        <a href="{{ url_for('admin.settings_view', tab='whatsapp') }}">Settings &rsaquo;
+        WhatsApp</a> apply to Cloud API runs.</p>
+    </div>
+  </section>
+
+  <section class="pan pan--12">
+    <h2 class="pan__h">{{ ico('clock') }} Recent batches</h2>
+    <div class="pan__b">
+      {% if batches %}
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Batch</th><th>Started</th><th class="num">Total</th>
+                <th class="num">Done</th><th class="num">Still queued</th><th class="act"></th></tr>
+          </thead>
+          <tbody>
+            {% for batch in batches %}
+            <tr>
+              <td><a class="strong" href="{{ url_for('admin.wa_batch', batch_id=batch.batch_id) }}">
+                {{ batch.batch_id }}</a></td>
+              <td>{{ batch.started | ago }}</td>
+              <td class="num">{{ batch.total }}</td>
+              <td class="num">{{ batch.done }}</td>
+              <td class="num">
+                <span class="{{ 'is-warn' if batch.pending }}">{{ batch.pending }}</span>
+              </td>
+              <td class="act">
+                <a class="ib" title="Open"
+                   href="{{ url_for('admin.wa_batch', batch_id=batch.batch_id) }}">{{ ico('external') }}</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">No batches yet.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{% endblock %}

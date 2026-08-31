@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Team &middot; {{ rows | length }} account{{ '' if rows | length == 1 else 's' }}</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm" href="{{ url_for('admin.user_new') }}">{{ ico('plus') }} Add someone</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="note note--info">
+  <b>One owner, and it is you.</b> The owner account cannot be switched off, deleted or
+  handed to anyone else. Everyone else gets a role: admin sees everything except the danger
+  zone and the vault key, sales works the pipeline and quotes, delivery works projects and
+  support, and accounts works the money.
+</div>
+
+<div class="pan">
+  <div class="pan__b pan__b--flush">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Person</th><th>Role</th><th>Last seen</th><th>Status</th><th class="act">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{{ 'is-draft' if not row.is_active }}">
+          <td>
+            <a class="rowlink" href="{{ url_for('admin.user_edit', user_id=row.id) }}">{{ row.name or row.email }}</a>
+            <span class="sub mono">{{ row.email }}{% if row.phone %} &middot; {{ row.phone }}{% endif %}</span>
+          </td>
+          <td>{{ badge(ROLE_LABELS.get(row.role, row.role), 'brand' if row.role == 'owner' else '') }}</td>
+          <td>
+            {% if row.last_login_at %}{{ row.last_login_at | ago }}
+            {% else %}<span class="muted">never signed in</span>{% endif %}
+          </td>
+          <td>
+            {% if row.is_active %}{{ badge('Active', 'good') }}
+            {% else %}{{ badge('No access', 'bad') }}{% endif %}
+          </td>
+          <td class="act">
+            {% if row.role != 'owner' %}
+            <form method="post" action="{{ url_for('admin.user_toggle', user_id=row.id) }}">
+              {{ csrf() }}
+              <button class="b b--sm b--ghost" type="submit">
+                {{ 'Revoke access' if row.is_active else 'Restore access' }}
+              </button>
+            </form>
+            {% if is_owner() %}
+            <form method="post" action="{{ url_for('admin.user_delete', user_id=row.id) }}"
+                  data-confirm="Remove {{ row.name or row.email }}? What they did stays in the activity log.">
+              {{ csrf() }}
+              <button class="b b--sm b--danger" type="submit">{{ ico('trash') }}</button>
+            </form>
+            {% endif %}
+            {% else %}
+            <span class="muted">that is you</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="pan">
+  <div class="pan__h">{{ ico('shield') }} <h2>What each role can reach</h2></div>
+  <div class="pan__b pan__b--flush">
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for code, areas in roles.items() %}
+        <tr>
+          <th style="width:150px">{{ ROLE_LABELS.get(code, code) }}</th>
+          <td>
+            {% if code == 'owner' %}
+              <span class="muted">Everything, including the money controls, the credential
+              vault and restore.</span>
+            {% else %}
+              <span class="chips">
+                {% for area in areas | sort %}<span class="chip">{{ area }}</span>{% endfor %}
+              </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

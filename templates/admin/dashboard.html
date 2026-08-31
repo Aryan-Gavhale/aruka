@@ -1,0 +1,270 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, bar, badge, stage_badge, sla_pill %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Everything that needs you today, in one screen</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.analytics') }}">{{ ico('chart') }} Analytics</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.lead_new') }}">{{ ico('plus') }} Log a lead</a>
+<a class="b b--sm" href="{{ url_for('admin.quote_new') }}">{{ ico('calc') }} Price something</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not digest.needs_attention %}
+<div class="note note--good">
+  <b>Nothing is on fire.</b> No overdue follow-up, no ticket past its promise, no renewal
+  or expiry inside the notice window. Go and build something.
+</div>
+{% endif %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Collected this month', collected_month | cmoney,
+         'Spent ' ~ (spent_month | cmoney), 'good' if net_month >= 0 else 'bad') }}
+  {{ kpi('Net this month', net_month | cmoney,
+         'Collected less what went out', 'good' if net_month >= 0 else 'bad') }}
+  {{ kpi('Owed to you', digest.receivables | cmoney,
+         digest.invoices_open ~ ' invoice' ~ ('' if digest.invoices_open == 1 else 's') ~ ' open',
+         'warn' if digest.aging.buckets[2].total or digest.aging.buckets[3].total else '') }}
+  {{ kpi('Recurring per month', mrr | cmoney, 'Hosting, care and retainers', 'info') }}
+</div>
+
+<div class="grid">
+
+  <!-- ── what needs a human ───────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('bell') }} <h2>Needs you today</h2>
+      <span class="spacer"></span>
+      <form method="post" action="{{ url_for('admin.notifications') }}">
+        {{ csrf() }}
+        <button class="b b--sm b--ghost" type="submit" name="action" value="sweep">
+          {{ ico('refresh') }} Run the digest
+        </button>
+      </form>
+    </div>
+
+    <div class="pan__b">
+      {% set queues = [
+        ('Follow-ups overdue', digest.followups_overdue, url_for('admin.followups'), 'bad'),
+        ('Follow-ups due today', digest.followups_due, url_for('admin.followups'), 'warn'),
+        ('Tickets at risk or breached', digest.tickets_flagged, url_for('admin.tickets_list'), 'bad'),
+        ('Payment reminders to send', digest.reminders, url_for('admin.receivables'), 'warn'),
+        ('Renewals inside notice', digest.renewals, url_for('admin.renewals'), 'info'),
+        ('Domains and hosting expiring', digest.expiries, url_for('admin.vault'), 'warn'),
+        ('Leads going quiet', digest.leads_going_quiet, url_for('admin.leads_list'), ''),
+      ] %}
+      {% set live = queues | rejectattr('1', 'equalto', []) | list %}
+
+      {% if live %}
+      <ul class="lst">
+        {% for label, rows, link, tone in live %}
+        <li>
+          <a href="{{ link }}">{{ label }}</a>
+          {{ badge(rows | length, tone) }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">Every queue is empty. The follow-up dates are all in the future, no
+      ticket is near its promise, and nothing renews inside the notice window.</p>
+      {% endif %}
+    </div>
+
+    {% if digest.tickets_flagged %}
+    <div class="pan__b">
+      <h3 class="sub-h">Support, oldest promise first</h3>
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for ticket, state in digest.tickets_flagged[:6] %}
+          <tr class="{{ 'is-flagged' if state.state == 'breached' }}">
+            <td>
+              <a href="{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}">{{ ticket.ref }}</a>
+              <span class="sub">{{ ticket.subject | shorten(46) }}</span>
+            </td>
+            <td>{{ badge(ticket.priority | upper,
+                         'bad' if ticket.priority == 'p1' else 'warn') }}</td>
+            <td>{{ sla_pill(state.resolve.state) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if digest.reminders %}
+    <div class="pan__b">
+      <h3 class="sub-h">Money to chase</h3>
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for row in digest.reminders[:6] %}
+          <tr>
+            <td>
+              <a href="{{ url_for('admin.invoice_detail', invoice_id=row.invoice.id) }}">{{ row.invoice.ref }}</a>
+              <span class="sub">{{ row.invoice.client_name }} &middot; {{ row.label }}</span>
+            </td>
+            <td class="num strong">{{ row.invoice.balance | money }}</td>
+            <td class="act">
+              <a class="b b--sm b--wa"
+                 href="{{ url_for('admin.wa_compose', kind='invoice', target_id=row.invoice.id) }}">
+                {{ ico('whatsapp') }}
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ── pipeline ─────────────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <div class="pan__h">
+      {{ ico('funnel') }} <h2>Pipeline</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--ghost" href="{{ url_for('admin.leads_board') }}">Open the board</a>
+    </div>
+    <div class="pan__b">
+      <div class="kpis kpis--2 kpis--flat">
+        {{ kpi('Open value', pipeline.raw | cmoney,
+               pipeline.detail | sum(attribute='n') ~ ' live leads') }}
+        {{ kpi('Weighted', pipeline.weighted | cmoney, 'By stage probability', 'brand') }}
+      </div>
+
+      <div class="bars" style="margin-top:14px">
+        {% set peak = pipeline.detail | map(attribute='value') | max if pipeline.detail else 0 %}
+        {% for row in pipeline.detail %}
+          {{ bar(row.label ~ ' (' ~ row.n ~ ')', row.value, peak, row.weighted | cmoney) }}
+        {% endfor %}
+        {% if not pipeline.detail %}
+        <p class="muted">No open leads. The enquiry form on the public site creates them,
+        or log one by hand.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="pan__b">
+      <h3 class="sub-h">This financial year</h3>
+      <dl class="dl dl--tight">
+        <dt>Enquiries</dt><dd>{{ lead_stats.leads }}</dd>
+        <dt>Won</dt><dd>{{ lead_stats.won }} &middot; {{ lead_stats.won_value | cmoney }}</dd>
+        <dt>Win rate</dt><dd>{{ lead_stats.win_rate }}% of decided leads</dd>
+        <dt>Average deal</dt><dd>{{ lead_stats.avg_deal | cmoney }}</dd>
+        <dt>Days to close</dt><dd>{{ lead_stats.avg_days_to_close }} on average</dd>
+        <dt>Collected</dt><dd>{{ collected_fy | cmoney }}</dd>
+        <dt>Spent</dt><dd>{{ spent_fy | cmoney }}</dd>
+      </dl>
+      <p style="margin-top:12px"><a href="{{ url_for('admin.conversion') }}">Conversion detail</a></p>
+    </div>
+  </section>
+
+  <!-- ── projects ─────────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('rocket') }} <h2>In flight</h2>
+      <span class="spacer"></span>
+      <a class="b b--sm b--ghost" href="{{ url_for('admin.projects_list') }}">All projects</a>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if active_projects %}
+      <table class="tbl">
+        <thead>
+          <tr><th>Project</th><th>Client</th><th>Progress</th><th>Target</th><th class="num">Value</th></tr>
+        </thead>
+        <tbody>
+          {% for project in active_projects %}
+          <tr>
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+              <span class="sub mono">{{ project.ref }}</span>
+            </td>
+            <td>
+              <a href="{{ url_for('admin.client_detail', client_id=project.client_id) }}">{{ project.client_name }}</a>
+            </td>
+            <td style="min-width:120px">
+              <span class="prog"><span class="prog__f" style="width: {{ project.progress_pct }}%"></span></span>
+              <span class="sub">{{ project.progress_pct }}%</span>
+            </td>
+            <td>
+              {% if project.target_on %}
+                <span class="{{ 'is-bad' if (project.target_on | days_until) < 0 }}">
+                  {{ project.target_on | date_fmt('%d %b') }}
+                </span>
+                <span class="sub">{{ project.health }}</span>
+              {% else %}<span class="muted">no date</span>{% endif %}
+            </td>
+            <td class="num">{{ project.value | cmoney }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">
+        {{ ico('rocket') }}
+        <h3>Nothing in flight</h3>
+        <p>Converting a won lead creates the client, the project and its milestones in one step.</p>
+        <a class="b b--ghost" href="{{ url_for('admin.leads_board') }}">Open the pipeline</a>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── recent leads and activity ────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <div class="pan__h">{{ ico('spark') }} <h2>Latest enquiries</h2></div>
+    <div class="pan__b">
+      {% if recent_leads %}
+      <ul class="lst">
+        {% for lead in recent_leads %}
+        <li>
+          <a href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>
+          {{ stage_badge(lead.stage) }}
+          <em>{{ lead.created_at | ago }}{% if lead.service_interest %} &middot; {{ lead.service_interest | shorten(30) }}{% endif %}</em>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No enquiries yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__h">{{ ico('list') }} <h2>Recent activity</h2></div>
+    <div class="pan__b">
+      {% if activity %}
+      <ol class="tl">
+        {% for row in activity %}
+        <li class="tl__i tl__i--{{ row.action }}">
+          <span class="tl__d"></span>
+          <div class="tl__c">
+            <span class="tl__k">{{ row.action | replace('_', ' ') }} {{ row.entity | replace('_', ' ') }}</span>
+            {% if row.label %}<p>{{ row.label | shorten(70) }}</p>{% endif %}
+            <span class="tl__m">{{ row.created_at | ago }} &middot; {{ row.user_email or 'system' }}</span>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      <p style="margin-top:12px"><a href="{{ url_for('admin.audit') }}">Full activity log</a></p>
+      {% else %}
+      <p class="muted">Nothing recorded yet.</p>
+      {% endif %}
+    </div>
+
+    {% if ticket_stats.total %}
+    <div class="pan__b">
+      <h3 class="sub-h">Support this year</h3>
+      <dl class="dl dl--tight">
+        <dt>Raised</dt><dd>{{ ticket_stats.total }}</dd>
+        <dt>Live now</dt><dd>{{ ticket_stats.live }}</dd>
+        <dt>Resolved within promise</dt><dd>{{ ticket_stats.sla_pct }}%</dd>
+        <dt>First reply</dt><dd>{{ ticket_stats.avg_response_hours }}h on average</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{% endblock %}

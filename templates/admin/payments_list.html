@@ -1,0 +1,89 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Payments received &middot; FY {{ fy }}</p>
+{% endblock %}
+
+{% block actions %}
+<form method="get">
+  <select class="in in--sm" name="fy" data-autofilter aria-label="Financial year">
+    {% for year in years | reverse %}
+    <option value="{{ year }}" {{ 'selected' if year == start_year }}>
+      FY {{ year }}-{{ (year + 1) % 100 }}
+    </option>
+    {% endfor %}
+  </select>
+</form>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.analytics_export', name='collected') }}">
+  {{ ico('download') }} CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Received', total | cmoney, 'Cash actually in, FY ' ~ fy, 'good') }}
+  {{ kpi('TDS deducted', tds | cmoney, 'Paid to the government on your behalf',
+         'warn' if tds else '') }}
+  {{ kpi('Receipts', rows | length, 'Including any voided') }}
+</div>
+
+{% if tds %}
+<div class="note note--info">
+  TDS is money you earned but never touched: a company client keeps 10% back under section 194J
+  and pays it to the government against your PAN. Claim it in your return - Form 26AS will show
+  it. The invoice is still fully settled, which is why those receipts close the balance.
+</div>
+{% endif %}
+
+<div class="pan">
+  <div class="pan__b pan__b--flush">
+    {% if rows %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Receipt</th><th>Client</th><th>Against</th><th>How</th>
+            <th class="num">Amount</th><th class="num">TDS</th><th class="act"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="{{ 'is-void' if row.voided_at }}">
+            <td>
+              <a class="rowlink" href="{{ url_for('admin.payment_detail', payment_id=row.id) }}">{{ row.ref }}</a>
+              <span class="sub">{{ row.paid_on | date_fmt('%d %b %Y') }}</span>
+            </td>
+            <td><a href="{{ url_for('admin.client_detail', client_id=row.client_id) }}">{{ row.client_name }}</a></td>
+            <td>
+              {% if row.invoice_ref %}
+              <a href="{{ url_for('admin.invoice_detail', invoice_id=row.invoice_id) }}">{{ row.invoice_ref }}</a>
+              {% else %}{{ badge('advance', 'info') }}{% endif %}
+            </td>
+            <td>{{ row.method }}
+              {% if row.reference %}<span class="sub mono">{{ row.reference }}</span>{% endif %}</td>
+            <td class="num strong">{{ row.amount | money }}</td>
+            <td class="num">{{ row.tds_amount | money if row.tds_amount else '—' }}</td>
+            <td class="act">
+              {% if row.voided_at %}{{ badge('void', 'mute') }}{% endif %}
+              <a class="ib" title="Receipt PDF" target="_blank" rel="noopener"
+                 href="{{ url_for('admin.receipt_pdf', payment_id=row.id) }}">{{ ico('doc') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('receipt') }}
+      <h3>Nothing received in FY {{ fy }}</h3>
+      <p>Payments are recorded against an invoice, which numbers a receipt for the client at
+        the same time.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

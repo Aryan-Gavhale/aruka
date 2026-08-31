@@ -1,0 +1,136 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import page_hero, sec_head, quote_card, stat_band, cta_band,
+   marquee_band, page_blocks with context %}
+
+{% block content %}
+{{ page_hero(page, 'About', 'A small studio, on purpose',
+             S('brand.promise'), trail=[('About', none)]) }}
+
+<section class="sec sec--flush">
+  <div class="wrap g-side">
+    <div class="prose r r--left">{{ S('brand.about') | md_lite }}</div>
+
+    <aside class="card r r--right">
+      <h4>The studio</h4>
+      <dl class="dl">
+        {% if S('brand.founder') %}<dt>Founder</dt><dd>{{ S('brand.founder') }}</dd>{% endif %}
+        {% if S('brand.established') %}<dt>Since</dt><dd>{{ S('brand.established') }}</dd>{% endif %}
+        <dt>Based in</dt><dd>{{ S('brand.city') }}, {{ S('brand.state') }}</dd>
+        <dt>Works with</dt><dd>Clients across India</dd>
+      </dl>
+      <div class="btns mt">
+        <a class="btn btn--block" href="{{ url_for('public.contact') }}">Talk to us</a>
+      </div>
+    </aside>
+  </div>
+</section>
+
+{% if stats %}
+<section class="sec sec--tight">
+  <div class="wrap">{{ stat_band(stats) }}</div>
+</section>
+{% endif %}
+
+{# What a small studio can promise that a bigger one cannot, stated plainly enough
+   that a client can hold us to it. #}
+<section class="sec sec--alt">
+  <div class="wrap">
+    {{ sec_head('How we work', 'Four things we do differently',
+                'Not values. Commitments, and each one is checkable.') }}
+    <div class="grid g2">
+      <div class="card r" data-tilt="4">
+        <span class="card__i">{{ ico('doc') }}</span>
+        <h3>Everything in writing, before the money</h3>
+        <p>You get a proposal with the scope, the exclusions and the dates. You accept it
+          online and that becomes what we are held to. Nothing starts on a verbal.</p>
+      </div>
+      <div class="card r" data-tilt="4">
+        <span class="card__i">{{ ico('wallet') }}</span>
+        <h3>The prices are on the website</h3>
+        <p>You can price a build yourself before you speak to anyone. What we quote comes
+          off the same rate card the calculator uses.</p>
+      </div>
+      <div class="card r" data-tilt="4">
+        <span class="card__i">{{ ico('user') }}</span>
+        <h3>One person, start to finish</h3>
+        <p>The person who scoped it builds it and answers your messages afterwards. No
+          account manager relaying questions to a team you never meet.</p>
+      </div>
+      <div class="card r" data-tilt="4">
+        <span class="card__i">{{ ico('lock') }}</span>
+        <h3>The logins are yours</h3>
+        <p>Domain, hosting, analytics, every account in your name from day one. Leaving us
+          should cost you nothing but a handover call.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap g-split">
+    <div>
+      {{ sec_head('The process', 'From first message to live') }}
+      <p class="lede">Six steps, and you always know which one you are on.</p>
+      {% if calculator_on %}
+      <div class="btns mt">
+        <a class="btn btn--ghost" href="{{ url_for('public.pricing_page') }}">
+          {{ ico('calc') }} Start with a price</a>
+      </div>
+      {% endif %}
+    </div>
+    <div class="steps">
+      <div class="steps__i r r--none"><div><h3>You get in touch</h3>
+        <p>A form, a WhatsApp message or a call. Whatever is easiest.</p></div></div>
+      <div class="steps__i r r--none"><div><h3>We work out the shape of it</h3>
+        <p>One conversation about the outcome you need, rather than a feature list.</p></div></div>
+      <div class="steps__i r r--none"><div><h3>A written proposal</h3>
+        <p>Scope, exclusions, milestones, fixed price. Valid for
+          {{ S('doc.validity_days') }} days.</p></div></div>
+      <div class="steps__i r r--none"><div><h3>You accept it online</h3>
+        <p>One click, name typed, timestamped. First milestone invoice follows.</p></div></div>
+      <div class="steps__i r r--none"><div><h3>We build in the open</h3>
+        <p>Staging link from the first week. Milestone reviews, one round of consolidated
+          feedback each.</p></div></div>
+      <div class="steps__i r r--none"><div><h3>Launch and handover</h3>
+        <p>Every login in your name, a recorded walkthrough, and support with a response
+          time in writing.</p></div></div>
+    </div>
+  </div>
+</section>
+
+{{ marquee_band('What we build with') }}
+
+{% if testimonials %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('References', 'People we have worked with', mid=true) }}
+    <div class="grid g3">
+      {% for row in testimonials %}{{ quote_card(row) }}{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if services %}
+<section class="sec sec--alt sec--tight">
+  <div class="wrap">
+    {{ sec_head('', 'What we do') }}
+    <div class="grid g4">
+      {% for row in services %}
+      <a class="card r" href="{{ url_for('public.service', slug=row.slug) }}">
+        <span class="card__i">{{ ico(row.icon or 'spark') }}</span>
+        <h3>{{ row.name }}</h3>
+        <p>{{ row.tagline }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{{ page_blocks(blocks) }}
+{{ cta_band('Still reading?',
+            'Then you are probably weighing up whether to send the message. Send it - the
+             worst outcome is an honest answer that we are not the right studio for it.') }}
+{% endblock %}

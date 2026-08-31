@@ -1,0 +1,91 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import sec_head, work_card with context %}
+
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap wrap--tight mid">
+    <span class="card__i r r--in" style="margin:0 auto 22px; width:64px; height:64px;
+          color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, transparent)">
+      {{ ico('check') }}</span>
+    <h1 class="r r--none">{{ title }}</h1>
+    <p class="lede r r--none" style="--d:120ms">{{ body }}</p>
+
+    {% if lead and lead.ref %}
+    <p class="mt r r--none" style="--d:180ms">
+      <span class="ref">{{ lead.ref }}</span>
+    </p>
+    <p class="small">
+      <button class="btn btn--plain" type="button" data-copy="{{ lead.ref }}">Copy the reference</button>
+    </p>
+    {% endif %}
+
+    <div class="btns btns--mid mt r r--none" style="--d:240ms">
+      {% if wa %}
+      <a class="btn btn--wa btn--lg" href="{{ wa }}" target="_blank" rel="noopener">
+        {{ ico('whatsapp') }} Message us now</a>
+      {% endif %}
+      <a class="btn btn--ghost btn--lg" href="{{ url_for('public.home') }}">Back to the site</a>
+    </div>
+  </div>
+</section>
+
+{% if quote %}
+{# A saved estimate is worth showing back, so the visitor can see we have it right
+   before the written proposal lands. #}
+<section class="sec sec--flush">
+  <div class="wrap wrap--tight">
+    <div class="card r">
+      <span class="eye">Your saved estimate</span>
+      <h2 style="margin:10px 0 4px">{{ quote.title }}</h2>
+      <p class="small">Reference {{ quote.ref }} &middot; held until
+        {{ quote.valid_until | date_fmt }}</p>
+
+      <ul class="total__l" style="margin-top:20px">
+        <li class="is-sum"><span>Estimate</span><span>{{ quote.total | money }}</span></li>
+        {% if quote.recurring_yearly %}
+        <li><span>Hosting and care</span><span>{{ quote.recurring_yearly | money }} a year</span></li>
+        {% endif %}
+        {% if quote.tax_amount %}
+        <li><span>Includes GST</span><span>{{ quote.tax_amount | money }}</span></li>
+        {% endif %}
+      </ul>
+
+      <p class="small mt">Nothing is charged and nothing is committed. We will send a written
+        proposal with the scope spelled out, and you decide from there.</p>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('While you wait', 'What happens next', mid=true) }}
+    <div class="steps">
+      <div class="steps__i r r--none">
+        <div><h3>We read it properly</h3>
+          <p>Not a template reply. If something in your message needs clarifying we will ask
+            before quoting.</p></div>
+      </div>
+      <div class="steps__i r r--none">
+        <div><h3>A short call, if it helps</h3>
+          <p>Twenty minutes to agree what the thing actually has to do. Skipped entirely if
+            the brief is already clear.</p></div>
+      </div>
+      <div class="steps__i r r--none">
+        <div><h3>A written proposal</h3>
+          <p>Scope, exclusions, milestones and a fixed price, valid for
+            {{ S('doc.validity_days') }} days. You accept it online.</p></div>
+      </div>
+    </div>
+
+    <div class="btns btns--mid mt">
+      <a class="btn btn--ghost" href="{{ url_for('public.work') }}">See some work {{ ico('arrow') }}</a>
+      <a class="btn btn--ghost" href="{{ url_for('public.insights') }}">Read something</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

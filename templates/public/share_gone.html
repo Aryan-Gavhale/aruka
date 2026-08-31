@@ -1,0 +1,36 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap wrap--tight mid">
+    <span class="card__i r r--in" style="margin:0 auto 22px; width:64px; height:64px;
+          color:var(--warm); border-color:color-mix(in srgb, var(--warm) 40%, transparent)">
+      {{ ico('link') }}</span>
+    <h1 class="r r--none">This link will not open</h1>
+    <p class="lede r r--none" style="--d:120ms">{{ reason }}</p>
+
+    <p class="mt">Share links are deliberately short-lived, so an old one in an email thread
+      stops working rather than quietly showing outdated prices. Ask us and you will have a
+      fresh one in minutes.</p>
+
+    <div class="btns btns--mid mt r r--none" style="--d:200ms">
+      {% if wa_link %}
+      <a class="btn btn--wa" href="{{ wa_link }}" target="_blank" rel="noopener">
+        {{ ico('whatsapp') }} Ask for a new link</a>
+      {% endif %}
+      {% if contact.email %}
+      <a class="btn btn--ghost" href="mailto:{{ contact.email }}?subject=Expired%20document%20link">
+        {{ ico('mail') }} Email us</a>
+      {% endif %}
+      <a class="btn btn--ghost" href="{{ url_for('public.home') }}">Back to the site</a>
+    </div>
+
+    <p class="small mt">Already a client? Everything we have sent you is also in the
+      <a href="{{ url_for('portal.login') }}">client portal</a>, which does not expire.</p>
+  </div>
+</section>
+{% endblock %}

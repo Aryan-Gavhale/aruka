@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.pages_list') }}">Pages</a> &rsaquo;
+  {{ page.title }} &rsaquo; blocks</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.pages_edit', row_id=page.id) }}">
+  {{ ico('pen') }} Page settings</a>
+<a class="b b--sm b--ghost" target="_blank" rel="noopener"
+   href="{{ url_for('public.page', slug=page.slug) }}">{{ ico('external') }} View it</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="pan">
+  <div class="pan__h">
+    {{ ico('layout') }} <h2>Sections, top to bottom</h2>
+    <p>The order here is the order on the page. An unpublished block stays in place but stops
+      rendering, which is easier to undo than deleting it.</p>
+  </div>
+  <div class="pan__b pan__b--flush">
+    {% if blocks %}
+    <table class="tbl">
+      <thead>
+        <tr><th class="act"></th><th>Block</th><th>Kind</th><th>Shown</th><th class="act">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for block in blocks %}
+        <tr class="{{ 'is-draft' if not block.is_published }}">
+          <td class="act">
+            <form method="post" action="{{ url_for('admin.page_block_move', block_id=block.id) }}">
+              {{ csrf() }}
+              <input type="hidden" name="direction" value="up">
+              <button class="ib" type="submit" title="Move up" {{ 'disabled' if loop.first }}>
+                {{ ico('up') }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.page_block_move', block_id=block.id) }}">
+              {{ csrf() }}
+              <input type="hidden" name="direction" value="down">
+              <button class="ib" type="submit" title="Move down" {{ 'disabled' if loop.last }}>
+                {{ ico('down') }}</button>
+            </form>
+          </td>
+          <td>
+            <a class="rowlink" href="{{ url_for('admin.page_block_edit', block_id=block.id) }}">
+              {{ block.name or kinds.get(block.kind, block.kind) }}</a>
+            <span class="sub">edited {{ block.updated_at | ago }}</span>
+          </td>
+          <td>{{ badge(kinds.get(block.kind, block.kind)) }}</td>
+          <td>
+            {% if block.is_published %}{{ badge('live', 'good') }}
+            {% else %}{{ badge('hidden', 'mute') }}{% endif %}
+          </td>
+          <td class="act">
+            <a class="ib" title="Edit" href="{{ url_for('admin.page_block_edit', block_id=block.id) }}">
+              {{ ico('pen') }}</a>
+            <form method="post" action="{{ url_for('admin.page_block_delete', block_id=block.id) }}"
+                  data-confirm="Remove this block from the page?">
+              {{ csrf() }}
+              <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      {{ ico('layout') }}
+      <h3>This page has no sections yet</h3>
+      <p>Add one below. Every kind has its own small form, so you are filling in a heading and
+        some copy rather than writing markup.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pan__f">
+    <h3 class="sub-h">Add a section</h3>
+    <div class="chips">
+      {% for code, label in kinds.items() %}
+      <form method="post" action="{{ url_for('admin.page_block_add', page_id=page.id) }}">
+        {{ csrf() }}
+        <input type="hidden" name="kind" value="{{ code }}">
+        <button class="chip" type="submit">{{ ico('plus') }} {{ label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

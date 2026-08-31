@@ -1,0 +1,215 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# Everything a client actually wants on one screen: what we owe them, what they owe
+   us, and what is waiting on their signature. Health is deliberately absent - an
+   amber dot found on a Sunday evening starts a worse conversation than a phone call
+   on Monday morning. #}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <h1>{{ 'Good to see you' if not client.contact_name else 'Hello ' ~ client.contact_name.split(' ')[0] }}</h1>
+    {% if welcome %}<p class="lede">{{ welcome }}</p>{% endif %}
+  </div>
+  <a class="btn btn--sm" href="{{ url_for('portal.ticket_new') }}">
+    {{ ico('life') }} Raise a request</a>
+</div>
+
+<div class="kv">
+  <div class="kv__i">
+    <span>Outstanding</span>
+    <b>{{ balance.balance | money }}</b>
+    {% if balance.balance %}
+    <a class="kv__a" href="{{ url_for('portal.invoices') }}">See what is open {{ ico('arrow') }}</a>
+    {% else %}
+    <span class="kv__ok">{{ ico('check') }} Nothing due</span>
+    {% endif %}
+  </div>
+  <div class="kv__i">
+    <span>Invoiced to date</span>
+    <b>{{ balance.invoiced | money }}</b>
+  </div>
+  <div class="kv__i">
+    <span>Received</span>
+    <b>{{ balance.paid | money }}</b>
+  </div>
+  <div class="kv__i">
+    <span>Open requests</span>
+    <b>{{ portal_counts.tickets }}</b>
+    {% if portal_counts.tickets %}
+    <a class="kv__a" href="{{ url_for('portal.tickets_list') }}">Open support {{ ico('arrow') }}</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if portal_counts.documents %}
+<div class="banner banner--warn mt">
+  {{ ico('doc') }}
+  <span><b>{{ portal_counts.documents }}
+    document{{ 's' if portal_counts.documents != 1 }} waiting on you.</b>
+    Nothing starts until one is accepted, so it is usually the fastest thing to clear.
+    <a href="{{ url_for('portal.documents_list') }}">Read them</a>.</span>
+</div>
+{% endif %}
+
+{# ── projects ─────────────────────────────────────────────────────────────── #}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('layers') }} Your work</h2></div>
+
+  {% if projects %}
+  <div class="grid g2">
+    {% for row in projects %}
+    <a class="pitem" href="{{ url_for('portal.project', project_id=row.id) }}">
+      <div class="pitem__h">
+        <span class="chip">{{ PROJECT_STATUSES.get(row.status, row.status) }}</span>
+        <span class="pitem__r">{{ row.ref }}</span>
+      </div>
+      <h3>{{ row.name }}</h3>
+      <div class="prog" role="img"
+           aria-label="{{ row.progress_pct }} percent complete"><i style="width:{{ row.progress_pct }}%"></i></div>
+      <p class="pitem__m">
+        {{ row.progress_pct }}% done
+        {% if row.target_on %}&middot; target {{ row.target_on | date_fmt }}{% endif %}
+        {% if row.launched_on %}&middot; live since {{ row.launched_on | date_fmt }}{% endif %}
+      </p>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">Nothing in build right now. When we start something it appears here with
+    its milestones and progress.</p>
+  {% endif %}
+</section>
+
+{# ── money ────────────────────────────────────────────────────────────────── #}
+<section class="psec">
+  <div class="psec__h">
+    <h2>{{ ico('wallet') }} Recent invoices</h2>
+    <a href="{{ url_for('portal.invoices') }}">All invoices and receipts {{ ico('arrow') }}</a>
+  </div>
+
+  {% if invoices %}
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Reference</th><th scope="col">Issued</th><th scope="col">Due</th>
+          <th scope="col" class="num">Total</th><th scope="col" class="num">Balance</th>
+          <th scope="col">Status</th><th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in invoices %}
+        <tr>
+          <th scope="row">{{ row.ref }}</th>
+          <td>{{ row.issued_on | date_fmt }}</td>
+          <td>{{ row.due_on | date_fmt if row.due_on else '—' }}</td>
+          <td class="num">{{ row.total | money }}</td>
+          <td class="num">{{ row.balance | money if row.balance else '—' }}</td>
+          <td><span class="chip chip--{{ row.status }}">
+            {{ INVOICE_STATUS_LABELS.get(row.status, row.status) }}</span></td>
+          <td class="num"><a href="{{ url_for('portal.invoice_pdf', invoice_id=row.id) }}"
+                             target="_blank" rel="noopener">PDF</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No invoices yet.</p>
+  {% endif %}
+</section>
+
+{# ── documents and support, side by side ──────────────────────────────────── #}
+<div class="grid g2">
+  <section class="psec">
+    <div class="psec__h">
+      <h2>{{ ico('doc') }} Documents</h2>
+      <a href="{{ url_for('portal.documents_list') }}">All {{ ico('arrow') }}</a>
+    </div>
+    {% if documents_rows %}
+    <ul class="plist">
+      {% for row in documents_rows %}
+      <li>
+        <a href="{{ url_for('portal.document', document_id=row.id) }}">
+          <span class="plist__t">{{ row.title }}</span>
+          <span class="plist__m">{{ row.ref }} &middot;
+            {{ 'accepted ' ~ (row.accepted_at | date_fmt) if row.status == 'accepted'
+               else 'waiting on you' }}</span>
+        </a>
+        {% if row.status != 'accepted' %}<span class="chip chip--warn">Needs a signature</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">Nothing to read or sign.</p>
+    {% endif %}
+  </section>
+
+  <section class="psec">
+    <div class="psec__h">
+      <h2>{{ ico('life') }} Support</h2>
+      <a href="{{ url_for('portal.tickets_list') }}">All {{ ico('arrow') }}</a>
+    </div>
+    {% if tickets_rows %}
+    <ul class="plist">
+      {% for row in tickets_rows %}
+      <li>
+        <a href="{{ url_for('portal.ticket', ticket_id=row.id) }}">
+          <span class="plist__t">{{ row.subject }}</span>
+          <span class="plist__m">{{ row.ref }} &middot; raised {{ row.created_at | date_fmt }}</span>
+        </a>
+        <span class="chip">{{ TICKET_STATUS_LABELS.get(row.status, row.status) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">Nothing open. <a href="{{ url_for('portal.ticket_new') }}">Raise a
+      request</a> if something needs attention.</p>
+    {% endif %}
+  </section>
+</div>
+
+{# ── renewals ─────────────────────────────────────────────────────────────────
+   Domains and certificates are the things that quietly expire and take a site with
+   them, so the dates are shown whether or not we are the ones holding them. #}
+{% if assets %}
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('key') }} Renewals coming up</h2></div>
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">What</th><th scope="col">Provider</th><th scope="col">Expires</th>
+          <th scope="col">Held by</th></tr>
+      </thead>
+      <tbody>
+        {% for row in assets %}
+        {% set days = row.expires_on | days_until %}
+        <tr class="{{ 'is-warn' if days is not none and days < 30 }}">
+          <th scope="row">{{ row.label }}<br><span class="small">{{ row.kind | title }}</span></th>
+          <td>{{ row.provider or '—' }}</td>
+          <td>{{ row.expires_on | date_fmt }}
+            {% if days is not none %}
+            <br><span class="small">{{ 'expired' if days < 0 else 'in ' ~ days ~ ' days' }}</span>
+            {% endif %}
+          </td>
+          <td>{{ 'You' if row.owned_by == 'client' else brand_name }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small">Anything registered in your name stays in your name. Ask us for the
+    transfer codes at any time and we will send them the same day.</p>
+</section>
+{% endif %}
+
+{% if upi and balance.balance %}
+<div class="banner mt">
+  {{ ico('zap') }}
+  <span>Paying by UPI? Our ID is <b>{{ upi }}</b>. Put the invoice reference in the note
+    so it lands against the right one, and the receipt reaches you automatically.</span>
+</div>
+{% endif %}
+{% endblock %}

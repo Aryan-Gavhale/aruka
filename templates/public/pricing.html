@@ -1,0 +1,323 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import page_hero, sec_head, plan_card, faq_list, faq_jsonld,
+   cta_band, form_guard, utm_fields, field, page_blocks with context %}
+
+{% block jsonld %}{{ faq_jsonld(faqs) }}{% endblock %}
+
+{% block content %}
+{{ page_hero(page, 'Pricing', 'What this costs',
+             'Real numbers on a public page. The written proposal confirms them and nothing
+              is charged until you accept it.',
+             trail=[('Pricing', none)]) }}
+
+{# ── packages ─────────────────────────────────────────────────────────────── #}
+{% if packages %}
+<section class="sec sec--flush">
+  <div class="wrap">
+    <div class="plans">
+      {% for pkg in packages[:3] %}{{ plan_card(pkg) }}{% endfor %}
+    </div>
+    {% if packages | length > 3 %}
+    <div class="plans mt">
+      {% for pkg in packages[3:] %}{{ plan_card(pkg) }}{% endfor %}
+    </div>
+    {% endif %}
+    <p class="small mid mt">
+      {% if gst_on() %}
+      All prices exclude GST at {{ S('gst.default_rate') }}%, added on the invoice.
+      {% else %}
+      Prices are inclusive - we are not GST registered yet, so no tax is added.
+      {% endif %}
+    </p>
+  </div>
+</section>
+{% endif %}
+
+{# ── the calculator ─────────────────────────────────────────────────────────
+   The form posts and works with JavaScript off; the running total is the part the
+   script adds. Every input name matches what pricing.parse_config reads, which is
+   the same parser the admin quote form uses. #}
+{% if calculator %}
+<section class="sec" id="calculator">
+  <div class="wrap">
+    {{ sec_head('Estimate', 'Price it yourself',
+                note or 'Tick what you need. The total updates as you go, and you only leave
+                         your details if you want the estimate saved.') }}
+
+    <form class="calc" id="calc" method="post" action="{{ url_for('public.pricing_page') }}"
+          data-estimate-url="{{ url_for('public.pricing_estimate') }}" data-timed data-once>
+      {{ form_guard() }}
+      {{ utm_fields() }}
+
+      <div>
+        {# 1. the package ────────────────────────────────────────────────── #}
+        <fieldset class="fset">
+          <legend>1. Start from a package</legend>
+          <p class="fset__h">The closest fit. Everything below adjusts it.</p>
+          <div class="opts">
+            {% for pkg in packages %}
+            <label class="opt">
+              <input type="radio" name="package_id" value="{{ pkg.id }}"
+                     {{ 'checked' if config.package_id == pkg.id
+                        or (not config.package_id and pkg.is_featured) }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">{{ pkg.name }}</span>
+                <span class="opt__s">{{ pkg.tagline or pkg.best_for }}</span>
+                <span class="opt__p">{{ 'from ' if pkg.is_from_price }}{{ pkg.price | money }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        {# 2. size and shape ─────────────────────────────────────────────── #}
+        <fieldset class="fset">
+          <legend>2. Size and shape</legend>
+          <p class="fset__h">Extra pages are
+            {{ extra_page_rate | money }} each beyond what the package includes.</p>
+          <div class="opts">
+            <label class="opt">
+              <input type="checkbox" data-shows="pages-row" {{ 'checked' if config.pages }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">More pages than that</span>
+                <span class="opt__s">Say how many in total</span>
+              </span>
+            </label>
+            <label class="opt">
+              <input type="checkbox" name="rush" value="1" {{ 'checked' if config.rush }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">Rush delivery</span>
+                <span class="opt__s">Compressed timeline, reserved capacity</span>
+                <span class="opt__p">+{{ rush_pct }}%</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="f f2 mt" id="pages-row" {{ 'hidden' if not config.pages }}>
+            <div class="fi">
+              <label for="f-pages">Total pages</label>
+              <input class="in" id="f-pages" name="pages" type="number" min="1" max="200"
+                     step="1" value="{{ config.pages or '' }}" inputmode="numeric">
+              <span class="fi__h">Count every distinct layout, not every blog post.</span>
+            </div>
+            <div class="fi">
+              <label for="f-complexity">How custom is it?</label>
+              <select class="in" id="f-complexity" name="complexity">
+                <option value="1" {{ 'selected' if not config.complexity or config.complexity == 1.0 }}>
+                  Standard - our components, your content</option>
+                <option value="1.4" {{ 'selected' if config.complexity == 1.4 }}>
+                  Some custom work - a few bespoke sections</option>
+                <option value="1.8" {{ 'selected' if config.complexity == 1.8 }}>
+                  Largely bespoke - own design system, integrations</option>
+                <option value="2.4" {{ 'selected' if config.complexity == 2.4 }}>
+                  Complex - custom logic, several systems talking</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        {# 3. add-ons, grouped ───────────────────────────────────────────── #}
+        {% set picked_ids = (config.addons or []) | map(attribute='addon_id') | list %}
+        {% for key, label, rows in groups %}
+        <fieldset class="fset">
+          <legend>{{ loop.index + 2 }}. {{ label }}</legend>
+          <div class="opts">
+            {% for row in rows %}
+            {% set qty = ((config.addons or []) | selectattr('addon_id', 'equalto', row.id)
+                          | map(attribute='qty') | first) %}
+            {% set price = row.unit_price | money
+                           ~ (' per ' ~ row.unit if row.unit and row.unit != 'each' else '')
+                           ~ (' \u00b7 ' ~ row.recurring_period | replace('_', ' ')
+                              if row.is_recurring else '') %}
+
+            {% if row.is_quantity %}
+            {# A quantity add-on posts a number rather than a tick, and zero is what
+               parse_config reads as unpicked. #}
+            <div class="opt opt--qty">
+              <span>
+                <span class="opt__t">{{ row.name }}</span>
+                {% if row.help %}<span class="opt__s">{{ row.help }}</span>{% endif %}
+                <span class="opt__p">{{ price }}</span>
+              </span>
+              <input type="number" name="addon_{{ row.id }}" min="0" max="{{ row.max_qty }}"
+                     step="1" value="{{ qty or 0 }}" inputmode="numeric"
+                     aria-label="{{ row.name }}, how many">
+            </div>
+            {% else %}
+            <label class="opt">
+              <input type="checkbox" name="addon_{{ row.id }}" value="1"
+                     {{ 'checked' if row.id in picked_ids }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">{{ row.name }}</span>
+                {% if row.help %}<span class="opt__s">{{ row.help }}</span>{% endif %}
+                <span class="opt__p">{{ price }}</span>
+              </span>
+            </label>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </fieldset>
+        {% endfor %}
+
+        {# 4. how you pay ────────────────────────────────────────────────── #}
+        <fieldset class="fset">
+          <legend>{{ groups | length + 3 }}. How you would like to pay</legend>
+          <div class="opts">
+            <label class="opt">
+              <input type="checkbox" name="annual_prepay" value="1"
+                     {{ 'checked' if config.annual_prepay }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">Settle it all up front</span>
+                <span class="opt__s">One transfer instead of milestones</span>
+                <span class="opt__p">&minus;{{ S('pricing.annual_prepay_discount_pct') }}%</span>
+              </span>
+            </label>
+            <label class="opt">
+              <input type="checkbox" name="referral" value="1" {{ 'checked' if config.referral }}>
+              <span class="opt__b" aria-hidden="true"></span>
+              <span>
+                <span class="opt__t">I was referred by a client</span>
+                <span class="opt__s">Add their code below</span>
+                <span class="opt__p">&minus;{{ S('pricing.referral_discount_pct') }}%</span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        {# 5. save it, which is where a lead is created ───────────────────── #}
+        <fieldset class="fset">
+          <legend>{{ groups | length + 4 }}. Want this in writing?</legend>
+          <p class="fset__h">Optional. Leave your details and we will save the estimate and
+            send a written proposal - {{ S('doc.validity_days') }} days to think about it,
+            nothing charged.</p>
+          <div class="f f2">
+            {{ field('name', 'Your name', 'text', placeholder='Priya Sharma') }}
+            {{ field('company', 'Business name', 'text', placeholder='Optional') }}
+            {{ field('email', 'Email', 'email', placeholder='you@company.in') }}
+            {{ field('phone', 'Phone or WhatsApp', 'tel', placeholder='+91 90000 00000') }}
+            {{ field('city', 'City', 'text', placeholder='Pune') }}
+            {{ field('referral_code', 'Referral code', 'text', placeholder='If you have one') }}
+            <div class="fi fi--wide">
+              <label for="f-note">Anything else we should know?</label>
+              <textarea class="in" id="f-note" name="note" rows="3"
+                        placeholder="What the site or system needs to do.">{{ config.note or '' }}</textarea>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+
+      {# ── the running total ─────────────────────────────────────────────── #}
+      <aside class="total">
+        <div class="total__c">
+          <span class="eye">Your estimate</span>
+          <div class="total__v" data-out="total">{{ (priced.total if priced else 0) | money }}</div>
+          <p class="total__s" data-out="days">
+            {% if priced and priced.delivery_days %}About {{ priced.delivery_days }} working days{% endif %}
+          </p>
+
+          <ul class="total__l" data-out="lines">
+            {% if priced %}
+            {% for line in priced.lines %}
+            {% if not line.is_recurring and line.amount %}
+            <li>
+              <span>{{ line.label }}{% if line.qty > 1 %} &times; {{ line.qty | int }}{% endif %}</span>
+              <span>{{ line.amount | money }}</span>
+            </li>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
+          </ul>
+
+          <ul class="total__l">
+            <li class="is-sum"><span>Subtotal</span>
+              <span data-out="subtotal">{{ (priced.subtotal if priced else 0) | money }}</span></li>
+            <li data-row="surcharge" {{ 'hidden' if not (priced and priced.surcharge_amount) }}>
+              <span>Rush</span>
+              <span data-out="surcharge">+ {{ (priced.surcharge_amount if priced else 0) | money }}</span></li>
+            <li class="is-off" data-row="discount"
+                {{ 'hidden' if not (priced and priced.discount_amount) }}>
+              <span>Discount</span>
+              <span data-out="discount">&minus; {{ (priced.discount_amount if priced else 0) | money }}</span></li>
+            <li data-row="tax" {{ 'hidden' if not (priced and priced.tax_amount) }}>
+              <span>GST {{ priced.tax_rate | int if priced else S('gst.default_rate') }}%</span>
+              <span data-out="tax">{{ (priced.tax_amount if priced else 0) | money }}</span></li>
+            <li data-row="recurring" {{ 'hidden' if not (priced and priced.recurring_yearly) }}>
+              <span>Hosting and care</span>
+              <span data-out="recurring">{{ (priced.recurring_yearly if priced else 0) | money }} a year</span></li>
+          </ul>
+
+          <h4 style="margin:24px 0 0">Payment schedule</h4>
+          <div class="ms" data-out="milestones">
+            {% if priced %}
+            {% for step in priced.milestones %}
+            <div class="ms__i"><span>{{ step.label }} &middot; {{ step.pct }}%</span>
+              <b>{{ step.amount | money }}</b></div>
+            {% endfor %}
+            {% endif %}
+          </div>
+
+          <div class="btns mt">
+            <button class="btn btn--block" type="submit" data-busy="Saving&hellip;">
+              Save this estimate {{ ico('arrow') }}</button>
+          </div>
+          <p class="total__note">{{ note }}</p>
+        </div>
+      </aside>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{# ── what is never included, which is the honest half of a price page ────── #}
+<section class="sec sec--alt">
+  <div class="wrap g-split">
+    <div>
+      {{ sec_head('The small print', 'What a price never includes') }}
+      <ul class="ticks ticks--no">
+        <li>Domain registration and renewal, which stays in your name</li>
+        <li>Third-party licences and subscriptions, billed at actuals</li>
+        <li>Paid advertising spend</li>
+        <li>Content writing and photography unless it is an add-on above</li>
+        <li>Work outside the accepted scope, which becomes a written change request</li>
+      </ul>
+    </div>
+    <div>
+      {{ sec_head('Terms', 'How the money works') }}
+      <ul class="ticks">
+        <li>Milestone payments: {% for step in S('doc.milestone_split') %}{{ step.pct }}%
+          {{ step.label | lower }}{{ ', ' if not loop.last }}{% endfor %}</li>
+        <li>Invoices are due in {{ S('invoice.terms_days') }} days</li>
+        <li>Late payment carries {{ S('invoice.late_fee_pct_month') }}% a month</li>
+        <li>{% if gst_on() %}GST at {{ S('gst.default_rate') }}% is added
+          {% else %}No GST is charged - we are not registered yet{% endif %}</li>
+        <li>Ownership of everything built transfers on final payment</li>
+      </ul>
+      <div class="btns mt">
+        {% for row in legal_links %}
+        <a class="btn btn--plain" href="{{ url_for('public.legal', slug=row.slug) }}">{{ row.title }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if faqs %}
+<section class="sec">
+  <div class="wrap wrap--tight">
+    {{ sec_head('Questions', 'About money, specifically', mid=true) }}
+    {{ faq_list(faqs) }}
+  </div>
+</section>
+{% endif %}
+
+{{ page_blocks(blocks) }}
+{{ cta_band('Rather just talk it through?',
+            'Send the brief and we will price it properly. The calculator is honest but a
+             conversation is faster for anything unusual.') }}
+{% endblock %}

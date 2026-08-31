@@ -1,0 +1,173 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import kpi, bar %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.leads_list') }}">Leads</a> &rsaquo; Conversion &rsaquo; FY {{ fy }}</p>
+{% endblock %}
+
+{% block actions %}
+<form method="get" action="{{ url_for('admin.conversion') }}">
+  <select class="in in--sm" name="fy" data-autofilter aria-label="Financial year">
+    {% for year in years | reverse %}
+    <option value="{{ year }}" {{ 'selected' if year == start_year }}>
+      FY {{ year }}-{{ (year + 1) | string | truncate(2, true, '') }}
+    </option>
+    {% endfor %}
+  </select>
+</form>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_board') }}">{{ ico('board') }} Board</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--4">
+  {{ kpi('Leads', headline.leads, headline.open ~ ' still open') }}
+  {{ kpi('Won', headline.won, headline.won_value | cmoney, 'good') }}
+  {{ kpi('Win rate', headline.win_rate ~ '%', 'Of the ' ~ (headline.won + headline.lost) ~ ' that closed') }}
+  {{ kpi('Average deal', headline.avg_deal | cmoney,
+         headline.avg_days_to_close ~ ' days to close') }}
+</div>
+
+<div class="grid">
+
+  <!-- ── funnel ───────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <h2 class="pan__h">{{ ico('funnel') }} The funnel</h2>
+    <div class="pan__b">
+      {% set widest = funnel[0].reached if funnel else 0 %}
+      <div class="funnel">
+        {% for step in funnel %}
+        <div class="funnel__r">
+          <span class="funnel__l">{{ step.label }}</span>
+          <span class="funnel__t">
+            <span class="funnel__f" style="width: {{ ((step.reached / widest * 100) if widest else 0) | round(1) }}%">
+              {{ step.reached }}
+            </span>
+          </span>
+          <span class="funnel__p">
+            {% if not loop.first %}
+              <b class="{{ 'is-bad' if step.rate < 30 else ('is-good' if step.rate > 60) }}">
+                {{ step.rate | round(1) }}%
+              </b>
+              <span>from {{ funnel[loop.index0 - 1].label | lower }}</span>
+            {% else %}
+              <span>everything starts here</span>
+            {% endif %}
+          </span>
+          <span class="funnel__v">{{ step.value | cmoney }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <p class="hint">
+        A stage's count includes everything that reached it and moved on, so the drop between
+        two rows is the real conversion. Lost leads reached some stage before they died, and
+        the funnel cannot tell which - the lost-reasons panel is the honest half of this
+        picture.
+      </p>
+
+      {% set worst = funnel[1:] | sort(attribute='rate') | first %}
+      {% if worst and worst.rate < 100 %}
+      <div class="note">
+        <b>The leak is at {{ worst.label | lower }}.</b>
+        Only {{ worst.rate | round }}% of leads get that far.
+        {% if worst.stage == 'contacted' %}
+        That is a response-time problem more often than a lead-quality one - the follow-up queue
+        is where it gets fixed.
+        {% elif worst.stage == 'quoted' %}
+        Leads are being qualified and then not priced. The calculator turns a conversation into
+        a number in about a minute.
+        {% elif worst.stage == 'won' %}
+        Quotes are going out and not closing. Look at the lost reasons before you cut prices.
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── forecast ─────────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <h2 class="pan__h">{{ ico('trend') }} Open pipeline</h2>
+    <div class="pan__b">
+      <div class="kpis kpis--2 kpis--flat">
+        {{ kpi('Raw', forecast.raw | cmoney, 'Everything still open') }}
+        {{ kpi('Weighted', forecast.weighted | cmoney, 'By stage probability', 'brand') }}
+      </div>
+      {% set peak = forecast.detail | map(attribute='value') | max if forecast.detail else 0 %}
+      {% for row in forecast.detail %}
+        {{ bar(row.label ~ ' \u00b7 ' ~ row.n, row.value, peak, row.weighted | cmoney) }}
+      {% endfor %}
+      {% if not forecast.detail %}<p class="muted">Nothing open right now.</p>{% endif %}
+    </div>
+  </section>
+
+  <!-- ── by source ────────────────────────────────────────────────────── -->
+  <section class="pan pan--7">
+    <h2 class="pan__h">{{ ico('globe') }} Where the money comes from</h2>
+    <div class="pan__b">
+      {% if by_source %}
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Source</th><th class="num">Leads</th><th class="num">Won</th>
+              <th class="num">Lost</th><th class="num">Conversion</th>
+              <th class="num">Won value</th><th class="num">Average deal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in by_source %}
+            <tr>
+              <td class="strong">{{ row.source }}</td>
+              <td class="num">{{ row.leads }}</td>
+              <td class="num">{{ row.won }}</td>
+              <td class="num">{{ row.lost }}</td>
+              <td class="num">
+                <span class="{{ 'is-good' if row.conversion >= 25 else ('is-bad' if row.leads > 4 and row.conversion < 8) }}">
+                  {{ row.conversion }}%
+                </span>
+              </td>
+              <td class="num">{{ row.won_value | money }}</td>
+              <td class="num">{{ row.avg_deal | cmoney }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">Cost per source and the full return on it live in
+        <a href="{{ url_for('admin.analytics') }}">Analytics</a>, where the spend is recorded.</p>
+      {% else %}
+      <p class="muted">No leads in this financial year yet.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── lost reasons ─────────────────────────────────────────────────── -->
+  <section class="pan pan--5">
+    <h2 class="pan__h">{{ ico('warn') }} Why they said no</h2>
+    <div class="pan__b">
+      {% if lost %}
+      {% set most = lost | map(attribute='n') | max %}
+      {% for row in lost %}
+        {{ bar(row.reason, row.n, most, row.n ~ ' \u00b7 ' ~ (row.value | cmoney), 'bad') }}
+      {% endfor %}
+      <p class="hint">
+        {% set unrecorded = lost | selectattr('reason', 'equalto', 'Not recorded') | first %}
+        {% if unrecorded and unrecorded.n > (headline.lost / 3) %}
+        {{ unrecorded.n }} of {{ headline.lost }} losses have no reason on them. Setting one
+        when you move a lead to Lost costs a second and is the only way this panel becomes
+        worth reading.
+        {% else %}
+        Price appearing at the top is not automatically a pricing problem - it is often the
+        cheapest thing for a client to say.
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="muted">Nothing lost this year.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{% endblock %}

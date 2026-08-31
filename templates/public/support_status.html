@@ -1,0 +1,130 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import crumbs with context %}
+
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+
+{% block content %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap wrap--tight">
+    {{ crumbs([('Support', url_for('public.support')), ('Check a ticket', none)]) }}
+    <h1 class="r r--none" data-split>Check a ticket</h1>
+    <p class="lede r r--none" style="--d:120ms">The reference and the email you raised it
+      with. Both, because a reference on its own should not open anyone's ticket.</p>
+  </div>
+</section>
+
+<section class="sec sec--flush">
+  <div class="wrap wrap--tight">
+    <form class="f f2 card" method="post" action="{{ url_for('public.support_status') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="fi">
+        <label for="f-ref">Reference</label>
+        <input class="in mono" id="f-ref" name="ref" required placeholder="TKT-2026-0001"
+               value="{{ ticket.ref if ticket else request.form.get('ref', '') }}"
+               autocapitalize="characters">
+      </div>
+      <div class="fi">
+        <label for="f-email">Email you used</label>
+        <input class="in" id="f-email" name="email" type="email" required
+               placeholder="you@company.in"
+               value="{{ ticket.contact_email if ticket else request.form.get('email', '') }}">
+      </div>
+      <div class="fi fi--wide">
+        <button class="btn" type="submit">{{ ico('search') }} Look it up</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+{% if ticket %}
+<section class="sec sec--flush">
+  <div class="wrap wrap--tight">
+
+    <div class="doc__hd">
+      <div>
+        <span class="doc__ref">{{ ticket.ref }}</span>
+        <h2 style="margin:6px 0 0">{{ ticket.subject }}</h2>
+      </div>
+      <div class="tags" style="margin:0">
+        <span class="chip {{ 'chip--ok' if ticket.status in ('resolved', 'closed')
+                             else 'chip--live' }}">{{ statuses[ticket.status] }}</span>
+        <span class="chip">{{ PRIORITY_LABELS[ticket.priority] }}</span>
+        {% if state.state == 'breached' %}
+        <span class="chip chip--warn">{{ ico('warn') }} Past our target</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <dl class="dl">
+      <dt>Raised</dt><dd>{{ ticket.created_at | datetime_fmt }}</dd>
+      {% if ticket.first_response_at %}
+      <dt>First reply</dt><dd>{{ ticket.first_response_at | datetime_fmt }}</dd>
+      {% elif ticket.response_due_at %}
+      <dt>First reply due</dt><dd>{{ ticket.response_due_at | datetime_fmt }}</dd>
+      {% endif %}
+      {% if ticket.resolved_at %}
+      <dt>Resolved</dt><dd>{{ ticket.resolved_at | datetime_fmt }}</dd>
+      {% elif ticket.resolve_due_at %}
+      <dt>Target resolution</dt><dd>{{ ticket.resolve_due_at | datetime_fmt }}</dd>
+      {% endif %}
+    </dl>
+
+    {% if ticket.status == 'waiting_client' %}
+    <div class="banner banner--warn mt">
+      {{ ico('warn') }}
+      <span><b>We are waiting on you.</b> The resolve clock is paused until you reply below.</span>
+    </div>
+    {% endif %}
+
+    <h3 style="margin-top:34px">The conversation</h3>
+    <div class="thread">
+      {% if ticket.body %}
+      <div class="msg msg--them">
+        <div class="msg__h">
+          <b>{{ ticket.contact_name or ticket.contact_email }}</b>
+          <span>{{ ticket.created_at | datetime_fmt }}</span>
+        </div>
+        {{ ticket.body | md_lite }}
+      </div>
+      {% endif %}
+
+      {% for row in thread %}
+      <div class="msg {{ 'msg--us' if row.author_kind != 'client' else 'msg--them' }}">
+        <div class="msg__h">
+          <b>{{ row.author_name or (brand_name if row.author_kind != 'client' else 'You') }}</b>
+          <span>{{ row.created_at | datetime_fmt }}</span>
+        </div>
+        {{ row.body | md_lite }}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if ticket.status != 'closed' %}
+    <form class="f mt" method="post"
+          action="{{ url_for('public.support_reply', ref=ticket.ref) }}" data-once>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="email" value="{{ ticket.contact_email }}">
+      <div class="fi">
+        <label for="f-body">Add to this ticket</label>
+        <textarea class="in" id="f-body" name="body" rows="4" required
+                  placeholder="Anything new - a screenshot, an exact error, or an answer to our question."></textarea>
+      </div>
+      <div class="fi">
+        <button class="btn" type="submit" data-busy="Adding&hellip;">
+          {{ ico('chat') }} Add it</button>
+      </div>
+    </form>
+    {% else %}
+    <div class="banner mt">
+      {{ ico('check') }}
+      <span>This ticket is closed. If it comes back, raise a
+        <a href="{{ url_for('public.support') }}">new one</a> and mention
+        {{ ticket.ref }}.</span>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

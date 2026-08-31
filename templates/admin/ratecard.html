@@ -1,0 +1,167 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.packages_list') }}">{{ ico('gift') }} Packages</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.addons_list') }}">{{ ico('plus') }} Add-ons</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.pricing_rules_list') }}">{{ ico('sliders') }} Rules</a>
+<a class="b b--sm" href="{{ url_for('admin.quote_new') }}">{{ ico('calc') }} Quote something</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="note">
+  Everything on this page is a database row you can edit. Nothing about your prices is in the
+  code, which is the point - a rate rise is a form, not a deploy.
+  {% if not gst %}
+  You are in <b>bill-of-supply mode</b>, so no GST is added anywhere. The switch is in
+  <a href="{{ url_for('admin.settings_view', tab='tax') }}">Settings &rsaquo; Tax</a>.
+  {% endif %}
+</div>
+
+<section class="pan pan--12">
+  <h2 class="pan__h">{{ ico('gift') }} Packages</h2>
+  <div class="pan__b">
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Package</th><th class="num">Price</th>
+            {% if is_owner() %}<th class="num">Costs you</th><th class="num">Margin</th>{% endif %}
+            <th class="num">Pages</th><th class="num">Days</th>
+            <th class="num">Renewal</th><th>Where</th><th class="act"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pkg in packages %}
+          {% set margin = (pkg.price or 0) - (pkg.internal_cost or 0) %}
+          <tr class="{{ 'row--off' if not pkg.is_active }}">
+            <td>
+              <a class="strong" href="{{ url_for('admin.packages_edit', row_id=pkg.id) }}">{{ pkg.name }}</a>
+              <span class="sub">{{ pkg.tagline | shorten(64) }}</span>
+              {% if pkg.best_for %}<span class="sub">for {{ pkg.best_for | shorten(56) }}</span>{% endif %}
+            </td>
+            <td class="num strong">
+              {% if pkg.is_from_price %}<span class="sub">from</span>{% endif %}
+              {{ pkg.price | money }}
+            </td>
+            {% if is_owner() %}
+            <td class="num">{{ pkg.internal_cost | money if pkg.internal_cost else '-' }}</td>
+            <td class="num">
+              <span class="{{ 'is-bad' if margin <= 0 else ('is-warn' if pkg.price and margin / pkg.price < 0.35) }}">
+                {{ ((margin / pkg.price * 100) | round) if pkg.price else 0 }}%
+              </span>
+            </td>
+            {% endif %}
+            <td class="num">{{ pkg.pages_included }}</td>
+            <td class="num">{{ pkg.delivery_days }}</td>
+            <td class="num">{{ pkg.recurring_yearly | money if pkg.recurring_yearly else '-' }}</td>
+            <td>
+              {% if pkg.is_featured %}{{ badge('Highlighted', 'brand') }}{% endif %}
+              {% if not pkg.is_active %}{{ badge('Hidden', 'mute') }}{% endif %}
+            </td>
+            <td class="act">
+              <a class="ib" href="{{ url_for('admin.packages_edit', row_id=pkg.id) }}"
+                 title="Edit">{{ ico('pen') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not packages %}
+          <tr><td colspan="9" class="empty">No packages yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">
+      Extra pages beyond a package are charged at <b>{{ extra_page | money }}</b> each.
+      A margin under 35% on a fixed-price package is where agencies quietly lose money -
+      the number goes red so you notice before you send it.
+    </p>
+  </div>
+</section>
+
+{% for category, label, rows in addon_groups %}
+<section class="pan pan--6">
+  <h2 class="pan__h">{{ ico('plus') }} {{ label }}</h2>
+  <div class="pan__b">
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for addon in rows %}
+        <tr class="{{ 'row--off' if not addon.is_active }}">
+          <td>
+            <a href="{{ url_for('admin.addons_edit', row_id=addon.id) }}">{{ addon.name }}</a>
+            {% if addon.help %}<span class="sub">{{ addon.help | shorten(70) }}</span>{% endif %}
+          </td>
+          <td class="num">
+            {{ addon.unit_price | money }}
+            <span class="sub">
+              per {{ addon.unit }}{% if addon.is_recurring %},
+                {{ addon.recurring_period | replace('_', ' ') }}{% endif %}
+            </span>
+          </td>
+          {% if is_owner() %}
+          <td class="num">
+            {% if addon.internal_cost %}
+            <span class="sub">costs {{ addon.internal_cost | money }}</span>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+
+<section class="pan pan--6">
+  <h2 class="pan__h">{{ ico('sliders') }} Rules the engine applies</h2>
+  <div class="pan__b">
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for rule in rules %}
+        <tr class="{{ 'row--off' if not rule.is_active }}">
+          <td>
+            <a href="{{ url_for('admin.pricing_rules_edit', row_id=rule.id) }}">{{ rule.label }}</a>
+            <span class="sub"><code>{{ rule.code }}</code></span>
+          </td>
+          <td class="num">
+            {% if rule.kind in ('surcharge_pct', 'discount_pct') %}{{ rule.value | round(2) }}%
+            {% elif rule.kind == 'multiplier' %}{{ rule.value }}x
+            {% else %}{{ rule.value | money }}{% endif %}
+          </td>
+          <td>{% if not rule.is_active %}{{ badge('Off', 'mute') }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% if not rules %}
+        <tr><td colspan="3" class="empty">No rules. The engine falls back to Settings.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="pan pan--6">
+  <h2 class="pan__h">{{ ico('coins') }} How you get paid</h2>
+  <div class="pan__b">
+    {% if milestone_plan %}
+    <table class="tbl tbl--tight">
+      <tbody>
+        {% for row in milestone_plan %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="num strong">{{ row.pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">Applied to every quote and to the milestones created when a lead converts.
+    Edit it under Settings &rsaquo; Documents.</p>
+    {% else %}
+    <p class="muted">No schedule set, so everything is billed on acceptance.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

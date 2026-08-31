@@ -1,0 +1,143 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, stage_badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_board') }}">{{ ico('board') }} Board</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_import') }}">{{ ico('up') }} Import</a>
+<a class="b b--sm b--ghost" href="{{ url_for('admin.leads_export', stage=stage) }}">{{ ico('down') }} Export</a>
+<a class="b b--sm" href="{{ url_for('admin.lead_new') }}">{{ ico('plus') }} New lead</a>
+{% endblock %}
+
+{% block content %}
+
+<form class="filters" method="get" action="{{ url_for('admin.leads_list') }}">
+  <input class="in" type="search" name="q" value="{{ q }}" placeholder="Name, company, email, phone or reference">
+
+  <select class="in" name="stage">
+    <option value="">Every stage ({{ counts.all or 0 }})</option>
+    <option value="open" {{ 'selected' if stage == 'open' }}>Open only</option>
+    {% for code in STAGES %}
+    <option value="{{ code }}" {{ 'selected' if stage == code }}>
+      {{ STAGE_LABELS[code] }} ({{ counts.get(code, 0) }})
+    </option>
+    {% endfor %}
+  </select>
+
+  <select class="in" name="followup">
+    <option value="">Any follow-up</option>
+    <option value="due" {{ 'selected' if followup == 'due' }}>Due</option>
+    <option value="overdue" {{ 'selected' if followup == 'overdue' }}>Overdue</option>
+    <option value="none" {{ 'selected' if followup == 'none' }}>None booked</option>
+  </select>
+
+  <select class="in" name="source">
+    <option value="">Any source</option>
+    {% for row in sources %}
+    <option value="{{ row.id }}" {{ 'selected' if source_id == row.id }}>{{ row.name }}</option>
+    {% endfor %}
+  </select>
+
+  {% if spam %}<input type="hidden" name="spam" value="1">{% endif %}
+  <button class="b b--sm" type="submit">Filter</button>
+  {% if q or stage or followup or source_id %}
+  <a class="b b--sm b--ghost" href="{{ url_for('admin.leads_list', spam='1' if spam else None) }}">Clear</a>
+  {% endif %}
+  <a class="b b--sm b--ghost" href="{{ url_for('admin.leads_list', spam=None if spam else '1') }}">
+    {{ ico('shield') }} {{ 'Back to real leads' if spam else 'Spam (' ~ (counts.spam or 0) ~ ')' }}
+  </a>
+</form>
+
+<div class="tbl-wrap">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Lead</th>
+        <th>Stage</th>
+        <th class="num">Value</th>
+        <th class="num">Score</th>
+        <th>Follow-up</th>
+        <th>Source</th>
+        <th>Added</th>
+        <th class="act"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lead in rows %}
+      <tr>
+        <td>
+          <a class="strong" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>
+          <span class="sub">
+            {{ lead.ref }}
+            {% if lead.company %} &middot; {{ lead.company }}{% endif %}
+            {% if lead.city %} &middot; {{ lead.city }}{% endif %}
+          </span>
+          <span class="sub">
+            {% if lead.email %}{{ lead.email }}{% endif %}
+            {% if lead.phone %} &middot; {{ lead.phone }}{% endif %}
+          </span>
+        </td>
+        <td>
+          {{ stage_badge(lead.stage) }}
+          {% if lead.stage == 'lost' and lead.lost_reason %}<span class="sub">{{ lead.lost_reason }}</span>{% endif %}
+          {% if lead.client_name %}<span class="sub">{{ lead.client_name }}</span>{% endif %}
+        </td>
+        <td class="num">{{ lead.quote_value | money if lead.quote_value else '-' }}</td>
+        <td class="num">
+          <span class="score score--wide" title="{{ lead.score }} of 100">
+            <span style="width: {{ lead.score }}%"></span>
+          </span>
+        </td>
+        <td>
+          {% if lead.next_followup_on %}
+            {% set gap = lead.next_followup_on | days_until %}
+            <span class="{{ 'is-bad' if gap is not none and gap < 0 else ('is-warn' if gap == 0) }}">
+              {{ lead.next_followup_on | date_fmt('%d %b') }}
+            </span>
+            {% if lead.followup_note %}<span class="sub">{{ lead.followup_note | shorten(48) }}</span>{% endif %}
+          {% else %}
+            <span class="muted">none</span>
+          {% endif %}
+        </td>
+        <td>
+          {{ lead.source_name or '-' }}
+          {% if lead.utm_campaign %}<span class="sub">{{ lead.utm_campaign }}</span>{% endif %}
+        </td>
+        <td><span title="{{ lead.created_at }}">{{ lead.created_at | ago }}</span></td>
+        <td class="act">
+          {% if lead.whatsapp %}
+          <a class="ib" title="Send WhatsApp"
+             href="{{ url_for('admin.wa_compose', kind='lead', target_id=lead.id) }}">{{ ico('whatsapp') }}</a>
+          {% endif %}
+          <a class="ib" title="Open" href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ ico('pen') }}</a>
+          <form method="post" action="{{ url_for('admin.lead_spam', lead_id=lead.id) }}"
+                data-confirm="{{ 'Restore this lead?' if spam else 'Mark as spam? It disappears from the pipeline but stays recoverable.' }}">
+            {{ csrf() }}
+            <input type="hidden" name="spam" value="{{ '0' if spam else '1' }}">
+            <button class="ib" type="submit" title="{{ 'Restore' if spam else 'Mark spam' }}">
+              {{ ico('shield') }}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+
+      {% if not rows %}
+      <tr>
+        <td colspan="8" class="empty">
+          {% if spam %}Nothing has been marked as spam.
+          {% elif q or stage or followup or source_id %}Nothing matches that filter.
+          {% else %}No leads yet. The enquiry form and the public calculator both land here.
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if rows | length >= 400 %}
+<p class="hint">Showing the newest 400. Narrow the filter, or export to CSV for the lot.</p>
+{% endif %}
+
+{% endblock %}

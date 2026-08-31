@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+{% from "admin/_document_body.html" import body_fields, clause_picker %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.documents_list') }}">Documents</a> &rsaquo;
+  New {{ kinds.get(kind, 'document') | lower }}</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+  {% if quote %}<input type="hidden" name="quote_id" value="{{ quote.id }}">{% endif %}
+  {% if lead %}<input type="hidden" name="lead_id" value="{{ lead.id }}">{% endif %}
+  {% if client %}<input type="hidden" name="client_id" value="{{ client.id }}">{% endif %}
+
+  <div class="pan pan--narrow">
+    <div class="pan__h">{{ ico('doc') }} <h2>What this is</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--4">
+          <label for="kind">Kind</label>
+          <select class="in" id="kind" name="kind">
+            {% for code, label in kinds.items() %}
+            <option value="{{ code }}" {{ 'selected' if kind == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint">Changing this after you start does not swap the clauses -
+            start again from the documents list instead.</span>
+        </div>
+        <div class="fi fi--8">
+          <label for="title">Title <em>*</em></label>
+          <input class="in" id="title" name="title" required value="{{ suggested }}">
+          <span class="hint">This is what the client reads on the cover page.</span>
+        </div>
+      </div>
+
+      {% if quote or lead or client %}
+      <div class="note note--info">
+        {% if quote %}
+        Built from quote <span class="mono">{{ quote.ref }}</span> at
+        <b>{{ quote.total | money }}</b>. The pricing table, delivery estimate and the
+        included/excluded lists come across on their own.
+        {% endif %}
+        {% if client %}For <b>{{ client.name }}</b>.
+        {% elif lead %}For the lead <b>{{ lead.name }}</b>. Accepting it online moves them
+        to won.{% endif %}
+      </div>
+      {% else %}
+      <div class="note note--warn">
+        This is not attached to a lead, a client or a quote. It will still render, but there
+        is no price table and nothing to move when it is accepted. Starting from a saved quote
+        is usually what you want.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="pan__h">{{ ico('note') }} <h2>The words</h2>
+      <p>Pre-filled from the quote and your settings. Everything here is yours to rewrite.</p>
+    </div>
+    <div class="pan__b">
+      {{ body_fields(fields, body) }}
+    </div>
+
+    <div class="pan__h">{{ ico('shield') }} <h2>Terms</h2></div>
+    <div class="pan__b">
+      {{ clause_picker(clauses, selected, categories) }}
+    </div>
+
+    <div class="pan__f">
+      <p class="hint">Nothing is sent yet. This creates a draft you can read end to end, print
+        as a PDF and only then share.</p>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Create the draft</button>
+    <a class="b b--ghost" href="{{ url_for('admin.documents_list') }}">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "public/base.html" %}
+{% from "public/_parts.html" import form_guard with context %}
+{% from "_doc.html" import doc_head, doc_masthead, doc_body, doc_sign, doc_foot with context %}
+
+{# A proposal reached through a share link. Whoever has the token can read it, so the
+   page carries the honeypot and timing guard on the acceptance form - a token that
+   leaks into a mailing list should not be acceptable by a crawler. #}
+
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block progress %}<div class="bar" role="presentation"></div>{% endblock %}
+
+{% block content %}
+<section class="sec" style="padding-top:clamp(112px, 14vw, 150px)">
+  <div class="wrap">
+    <div class="doc">
+      {{ doc_head(document, accepted, declined) }}
+      {{ doc_masthead(document, url_for('public.document_share_pdf', token=share.token)) }}
+      {{ doc_body(document, body, quote, clauses) }}
+
+      {% if not accepted and not declined %}
+      {% call doc_sign(document, body,
+                       url_for('public.document_respond', token=share.token), wa_link) %}
+      {{ form_guard() }}
+      {% endcall %}
+      {% endif %}
+
+      {{ doc_foot() }}
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import page_hero, sec_head, work_card, cta_band,
+   page_blocks with context %}
+
+{% block content %}
+{{ page_hero(page, 'Work', 'Things we have built',
+             'Fewer, longer case studies rather than a wall of logos. Each one names the
+              problem, what we did and what changed.',
+             trail=[('Work', none)]) }}
+
+{% if sectors %}
+<section class="sec sec--flush sec--tight">
+  <div class="wrap">
+    <div class="tags r r--none" role="group" aria-label="Filter by sector">
+      <a class="tag {{ 'tag--on' if not sector }}" href="{{ url_for('public.work') }}">Everything</a>
+      {% for row in sectors %}
+      <a class="tag {{ 'tag--on' if sector == row.sector }}"
+         href="{{ url_for('public.work', sector=row.sector) }}">{{ row.sector }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="sec {{ 'sec--flush' if sectors }}">
+  <div class="wrap">
+    {% if rows %}
+    <div class="work">
+      {% for row in rows %}{{ work_card(row) }}{% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">
+      {{ ico('star') }}
+      <h3>{% if sector %}Nothing in {{ sector }} yet{% else %}No case studies published yet{% endif %}</h3>
+      <p>{% if sector %}Try another sector, or ask us directly - not every project ends up
+        written up.{% else %}They are written in the panel and appear here once published.{% endif %}</p>
+      {% if sector %}
+      <div class="btns btns--mid mt">
+        <a class="btn btn--ghost" href="{{ url_for('public.work') }}">See everything</a>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{{ page_blocks(blocks) }}
+{{ cta_band('Want the same for yours?',
+            'The projects above started as a conversation about something that was not
+             working. That is all this needs to be too.') }}
+{% endblock %}

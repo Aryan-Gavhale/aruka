@@ -1,0 +1,165 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, kpi, badge, copy_btn %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Referrals &middot; {{ payout_pct }}% of the first invoice</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.settings_view', tab='crm') }}">
+  {{ ico('cog') }} Change the rates</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="kpis kpis--3">
+  {{ kpi('Owed out', due_total | cmoney, 'Approved but not yet paid',
+         'warn' if due_total else 'good') }}
+  {{ kpi('Payout rate', payout_pct ~ '%', 'Of the first invoice they bring in') }}
+  {{ kpi('Their discount', (discount_pct or 0) ~ '%',
+         'Taken off the new client\'s first quote') }}
+</div>
+
+<div class="note note--info">
+  The referrer gets {{ payout_pct }}% and the person they send gets
+  {{ discount_pct or 0 }}% off - both sides gain, which is what makes anyone actually pass your
+  name on. Payouts are recorded here and appear as an expense when paid, so the referred work's
+  margin is the real one.
+</div>
+
+<div class="grid">
+  <!-- ── who refers ───────────────────────────────────────────────────────── -->
+  <section class="pan pan--6">
+    <div class="pan__h">
+      {{ ico('users') }} <h2>Codes in the wild</h2>
+      <p>The code goes in the referral field on the pricing calculator and the enquiry form.
+        Anything that arrives with it is tagged to them for good.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if referrers %}
+      <table class="tbl">
+        <thead>
+          <tr><th>Client</th><th>Code</th><th class="num">Clients</th><th class="num">Leads</th></tr>
+        </thead>
+        <tbody>
+          {% for row in referrers %}
+          <tr>
+            <td><a class="rowlink" href="{{ url_for('admin.client_detail', client_id=row.id) }}">{{ row.name }}</a></td>
+            <td>
+              <span class="mono">{{ row.referral_code }}</span>
+              {{ copy_btn(row.referral_code, 'Copy the code') }}
+            </td>
+            <td class="num">{{ row.sent or '—' }}</td>
+            <td class="num">{{ row.leads_sent or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">
+        Nobody has a code yet. Give one to the clients who already talk about you.
+      </p>
+      {% endif %}
+    </div>
+
+    <div class="pan__b">
+      <h3 class="sub-h">Issue a code</h3>
+      <div class="rows">
+        {% for row in clients if not row.referral_code %}
+        <form class="row-inline" method="post"
+              action="{{ url_for('admin.referral_code', client_id=row.id) }}">
+          {{ csrf() }}
+          <span>{{ row.name }}</span>
+          <button class="b b--sm b--ghost" type="submit">{{ ico('plus') }} Give them a code</button>
+        </form>
+        {% else %}
+        <p class="muted">Every active client has one.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- ── payouts ──────────────────────────────────────────────────────────── -->
+  <section class="pan pan--6">
+    <div class="pan__h">{{ ico('wallet') }} <h2>Payouts</h2></div>
+    <div class="pan__b pan__b--flush">
+      {% if payouts %}
+      <table class="tbl">
+        <thead>
+          <tr><th>To</th><th>Against</th><th class="num">Amount</th><th class="act">Status</th></tr>
+        </thead>
+        <tbody>
+          {% for row in payouts %}
+          <tr class="{{ 'is-done' if row.status == 'paid' }}">
+            <td>{{ row.client_name }}
+              {% if row.notes %}<span class="sub">{{ row.notes }}</span>{% endif %}</td>
+            <td>
+              {% if row.invoice_ref %}
+              <a href="{{ url_for('admin.invoice_detail', invoice_id=row.invoice_id) }}">{{ row.invoice_ref }}</a>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="num strong">{{ row.amount | money }}</td>
+            <td class="act">
+              {% if row.status == 'paid' %}
+                {{ badge('paid ' ~ (row.paid_on | date_fmt('%d %b')), 'good') }}
+              {% else %}
+              <details class="adder adder--inline">
+                <summary class="b b--sm">Mark paid</summary>
+                <form method="post" action="{{ url_for('admin.referral_payout_paid', payout_id=row.id) }}">
+                  {{ csrf() }}
+                  <input class="in in--sm" name="paid_on" type="date" value="{{ today }}">
+                  <input class="in in--sm" name="method" value="UPI" placeholder="How">
+                  <input class="in in--sm" name="reference" placeholder="Reference">
+                  <button class="b b--sm" type="submit">Paid</button>
+                </form>
+              </details>
+              {% if is_owner() %}
+              <form method="post" action="{{ url_for('admin.referral_payout_delete', payout_id=row.id) }}"
+                    data-confirm="Remove this payout?">
+                {{ csrf() }}
+                <button class="ib" type="submit" title="Remove">{{ ico('trash') }}</button>
+              </form>
+              {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:16px 18px">Nothing owed out.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__b">
+      <details class="adder">
+        <summary>{{ ico('plus') }} Record a payout as due</summary>
+        <form method="post" action="{{ url_for('admin.referral_payout_add') }}">
+          {{ csrf() }}
+          <div class="grid">
+            <div class="fi fi--7"><label for="p-client">Owed to</label>
+              <select class="in in--sm" id="p-client" name="client_id" required>
+                <option value="">Choose</option>
+                {% for row in clients %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+              </select></div>
+            <div class="fi fi--5"><label for="p-amount">Amount</label>
+              <input class="in in--sm" id="p-amount" name="amount" type="number" step="1" required></div>
+            <div class="fi fi--12"><label for="p-notes">What for</label>
+              <input class="in in--sm" id="p-notes" name="notes"
+                     placeholder="Referred Sharma Textiles, invoice AR/INV/2026-27/0004"></div>
+          </div>
+          <button class="b b--sm" type="submit">Record it</button>
+        </form>
+      </details>
+    </div>
+
+    <div class="pan__f">
+      <p class="hint">Marking a payout paid also writes it into expenses under the referral
+        category. Without that, a referred project looks more profitable than it was and you
+        would keep chasing the wrong kind of work.</p>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

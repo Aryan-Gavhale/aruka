@@ -1,0 +1,242 @@
+{# One rendering of a proposal, used by both the tokenised share link on the public
+   side and the signed-in copy in the portal.
+
+   The two routes differ only in how they prove who is reading: a token in the URL,
+   or a portal session. What the client sees - the money, the clauses, the wording of
+   the acceptance - must be byte-identical, because it is the thing being agreed to
+   and "which version were you looking at" is not a conversation to have later.
+
+   Deliberately plainer than the rest of the site: nothing moves, nothing hides behind
+   an accordion, and it prints cleanly. #}
+{% from "public/_icons.html" import ico %}
+
+{% macro doc_head(document, accepted=false, declined=false) %}
+{% if accepted %}
+<div class="banner banner--ok">
+  {{ ico('check') }}
+  <span><b>Accepted on {{ document.accepted_at | datetime_fmt }}</b>
+    by {{ document.accepted_by }}. This copy is kept as the record of what was
+    agreed. A countersigned PDF is on its way to you.</span>
+</div>
+{% elif declined %}
+<div class="banner banner--warn">
+  {{ ico('x') }}
+  <span><b>Declined on {{ document.declined_at | datetime_fmt }}.</b>
+    Nothing further happens. If it was a matter of price or timing, tell us - a
+    revised version is not a problem.</span>
+</div>
+{% elif document.valid_until and (document.valid_until | days_until) < 0 %}
+<div class="banner banner--warn">
+  {{ ico('clock') }}
+  <span><b>This expired on {{ document.valid_until | date_fmt }}.</b>
+    You can still read it, but ask us to reissue before accepting - rates may have
+    moved.</span>
+</div>
+{% elif document.valid_until %}
+<div class="banner">
+  {{ ico('clock') }}
+  <span>Valid until <b>{{ document.valid_until | date_fmt }}</b>
+    ({{ document.valid_until | days_until }} days). Prices are held until then.</span>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro doc_masthead(document, pdf_url='') %}
+<header class="doc__hd">
+  <div>
+    <span class="eye">{{ document.kind | replace('_', ' ') | title }}</span>
+    <h1 style="font-size:clamp(1.9rem, 4vw, 2.8rem); margin:8px 0 6px">{{ document.title }}</h1>
+    <p class="doc__ref">
+      {{ document.ref }}
+      {% if document.version > 1 %}&middot; version {{ document.version }}{% endif %}
+      {% if document.issued_on %}&middot; issued {{ document.issued_on | date_fmt }}{% endif %}
+    </p>
+  </div>
+  {% if pdf_url %}
+  <div class="btns">
+    <a class="btn btn--ghost btn--sm" href="{{ pdf_url }}">{{ ico('download') }} PDF</a>
+  </div>
+  {% endif %}
+</header>
+{% endmacro %}
+
+
+{# Everything between the masthead and the signature block: the parties, the written
+   sections, the money and the terms. #}
+{% macro doc_body(document, body, quote, clauses) %}
+<div class="grid g2 doc__sec">
+  <div>
+    <h4>Prepared by</h4>
+    <p>
+      <b>{{ S('brand.legal_name') or brand_name }}</b><br>
+      {% if contact.address %}{{ contact.address }}<br>{% endif %}
+      {% if contact.email %}{{ contact.email }}<br>{% endif %}
+      {% if contact.phone_display %}{{ contact.phone_display }}<br>{% endif %}
+      {% if S('gst.gstin') %}GSTIN {{ S('gst.gstin') }}{% endif %}
+    </p>
+  </div>
+  <div>
+    <h4>Prepared for</h4>
+    <p>
+      <b>{{ body.party_name or body.client_name or 'You' }}</b><br>
+      {% if body.party_address %}{{ body.party_address }}<br>{% endif %}
+      {% if body.party_email %}{{ body.party_email }}{% endif %}
+    </p>
+  </div>
+</div>
+
+{% for key, meta in BODY_LABELS.items() %}
+{% if body.get(key) %}
+<section class="doc__sec">
+  <h2>{{ meta[0] }}</h2>
+  <div class="prose" style="max-width:none">{{ body[key] | md_lite }}</div>
+</section>
+{% endif %}
+{% endfor %}
+
+{% if quote %}
+<section class="doc__sec">
+  <h2>What it costs</h2>
+  <table class="doc__t">
+    <thead>
+      <tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for line in quote.one_time %}
+      <tr>
+        <td>
+          {{ line.label }}
+          {% if line.description %}<br><span class="small">{{ line.description }}</span>{% endif %}
+        </td>
+        <td>{{ line.qty | int if line.qty == line.qty | int else line.qty }}</td>
+        <td>{{ line.amount | money }}</td>
+      </tr>
+      {% endfor %}
+
+      {% if quote.quote.tax_amount %}
+      <tr><td colspan="2">GST</td><td>{{ quote.quote.tax_amount | money }}</td></tr>
+      {% endif %}
+      <tr class="is-total">
+        <td colspan="2">Total{% if not quote.quote.tax_amount and not gst_on() %},
+          no tax applicable{% endif %}</td>
+        <td>{{ quote.quote.total | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small">{{ quote.quote.total | in_words }}</p>
+
+  {% if quote.recurring %}
+  <h3 style="margin-top:30px">Ongoing, billed separately</h3>
+  <table class="doc__t">
+    <tbody>
+      {% for line in quote.recurring %}
+      <tr>
+        <td>{{ line.label }}
+          {% if line.description %}<br><span class="small">{{ line.description }}</span>{% endif %}
+        </td>
+        <td>{{ line.unit_price | money }} / {{ line.recurring_period | replace('_', ' ') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if quote.milestones %}
+  <h3 style="margin-top:30px">Payment schedule</h3>
+  <table class="doc__t">
+    <tbody>
+      {% for step in quote.milestones %}
+      <tr><td>{{ step.label }}</td><td>{{ step.pct }}%</td><td>{{ step.amount | money }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="small">
+    Invoices fall due {{ S('invoice.terms_days') }} days from issue.
+    {% if S('invoice.late_fee_pct_month') %}
+    Overdue amounts carry {{ S('invoice.late_fee_pct_month') }}% a month.
+    {% endif %}
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if clauses %}
+<section class="doc__sec">
+  <h2>Terms</h2>
+  {% for clause in clauses %}
+  <div class="clause">
+    <h3>{{ loop.index }}. {{ clause.title }}
+      <em>&nbsp;{{ clause.code }} v{{ clause.version }}</em></h3>
+    <div class="prose" style="max-width:none">{{ clause.body | md_lite }}</div>
+  </div>
+  {% endfor %}
+
+  <div class="banner">
+    {{ ico('warn') }}
+    <span><b>Have your own lawyer read this.</b> These terms are drafted for Indian
+      engagements and we believe them fair, but they are our terms and we are not
+      your legal adviser. Anything here can be discussed before you accept.</span>
+  </div>
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# The signature block. `caller()` supplies the hidden fields, because the public
+   copy needs the honeypot and timing guard while the portal copy already knows who
+   is typing and only needs the CSRF token. #}
+{% macro doc_sign(document, body, post_url, wa='') %}
+<div class="sign" id="accept">
+  <h3>Accepting this</h3>
+  <p class="sign__note">Typing your name below and clicking accept has the same effect
+    as signing it. We record your name, the time and your IP address as the record of
+    acceptance, under the Information Technology Act 2000.</p>
+
+  <form class="f" method="post" action="{{ post_url }}" data-once>
+    {{ caller() }}
+    <div class="f f2">
+      <div class="fi">
+        <label for="f-name">Your full name <em>*</em></label>
+        <input class="in" id="f-name" name="name" required
+               placeholder="As you would sign it" autocomplete="name">
+      </div>
+      <div class="fi">
+        <label for="f-note">Anything to note</label>
+        <input class="in" id="f-note" name="note" placeholder="Optional">
+      </div>
+    </div>
+
+    <label class="consent">
+      <input type="checkbox" name="agree" value="1">
+      <span>I have read this {{ (document.kind or 'document') | replace('_', ' ') }}
+        including the terms above, and I accept it on behalf of
+        {{ body.party_name or 'my organisation' }}.</span>
+    </label>
+
+    <div class="sign__row">
+      <button class="btn btn--lg" type="submit" name="action" value="accept"
+              data-busy="Recording&hellip;">{{ ico('check') }} Accept and start</button>
+      <button class="btn btn--ghost" type="submit" name="action" value="decline"
+              data-confirm="Decline this? We will be told, and nothing further happens.">
+        Decline</button>
+    </div>
+  </form>
+
+  <p class="small mt">Questions before you decide?
+    {% if wa %}<a href="{{ wa }}" target="_blank" rel="noopener">Message us</a> or {% endif %}
+    email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>. Nothing is
+    binding until you accept.</p>
+</div>
+{% endmacro %}
+
+
+{% macro doc_foot() %}
+<p class="small mt" style="text-align:center">
+  {{ S('brand.legal_name') or brand_name }}
+  {% if S('doc.signatory_name') %}
+  &middot; {{ S('doc.signatory_name') }}, {{ S('doc.signatory_title') }}
+  {% endif %}
+  &middot; disputes are subject to the courts at {{ S('doc.jurisdiction_city') }}
+</p>
+{% endmacro %}

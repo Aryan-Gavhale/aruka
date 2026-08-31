@@ -1,0 +1,10 @@
+# Aruka - runtime dependencies.
+# Pinned as minimums so the project can be recreated elsewhere with:
+#   pip install -r requirements.txt
+Flask>=3.0
+Pillow>=10.0
+reportlab>=4.0
+requests>=2.31
+
+# Only needed to run check_browser.py:
+#   pip install playwright && playwright install chromium

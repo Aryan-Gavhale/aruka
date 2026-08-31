@@ -1,0 +1,267 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge, kpi %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">
+  <a href="{{ url_for('admin.quotes_list') }}">Quotes</a> &rsaquo; {{ quote.ref }}
+  {% if lead %}&rsaquo; <a href="{{ url_for('admin.lead_detail', lead_id=lead.id) }}">{{ lead.name }}</a>{% endif %}
+  {% if client %}&rsaquo; <a href="{{ url_for('admin.client_detail', client_id=client.id) }}">{{ client.name }}</a>{% endif %}
+</p>
+{% endblock %}
+
+{% block actions %}
+<a class="b b--sm b--ghost" href="{{ url_for('admin.document_new', quote_id=quote.id, kind='proposal') }}">
+  {{ ico('doc') }} Make the proposal
+</a>
+<form method="post" action="{{ url_for('admin.quote_duplicate', quote_id=quote.id) }}">
+  {{ csrf() }}
+  <button class="b b--sm b--ghost" type="submit">{{ ico('copy') }} Revise</button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+{% set q = summary.quote %}
+{% set margin = summary.margin %}
+
+<div class="kpis kpis--4">
+  {{ kpi('One-time total', q.total | money,
+         'Taxable ' ~ (q.taxable_value | money) ~ (' + GST ' ~ (q.tax_amount | money) if q.tax_amount else '')) }}
+  {{ kpi('Yearly after', q.recurring_yearly | money if q.recurring_yearly else '-',
+         'Hosting, domain and care') }}
+  {% if is_owner() %}
+  {{ kpi('Margin', margin | money, summary.margin_pct ~ '% of the taxable value',
+         'bad' if margin <= 0 else ('warn' if summary.margin_pct < 35 else 'good')) }}
+  {% else %}
+  {{ kpi('Lines', summary.lines | length, 'One-time and recurring') }}
+  {% endif %}
+  {{ kpi('Valid until', q.valid_until | date_fmt if q.valid_until else 'no date',
+         (q.valid_until | days_until) ~ ' days left' if q.valid_until else '',
+         'bad' if q.valid_until and (q.valid_until | days_until) < 0 and q.status in ('draft', 'sent') else '') }}
+</div>
+
+{% if q.valid_until and (q.valid_until | days_until) < 0 and q.status in ('draft', 'sent') %}
+<div class="note note--warn">
+  This quote expired {{ -(q.valid_until | days_until) }} day(s) ago. Either move the date, or
+  <a href="#revise">revise it</a> - honouring a stale price is a decision, not an accident.
+</div>
+{% endif %}
+
+<div class="grid">
+
+  <!-- ── the lines ───────────────────────────────────────────────────── -->
+  <section class="pan pan--8">
+    <h2 class="pan__h">{{ ico('list') }} What is in it</h2>
+    <div class="pan__b">
+      <div class="tbl-wrap">
+        <table class="tbl tbl--lines">
+          <thead>
+            <tr>
+              <th>Line</th><th class="num">Qty</th><th class="num">Unit</th>
+              <th class="num">Amount</th>
+              {% if is_owner() %}<th class="num">Cost</th>{% endif %}
+              <th class="act"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in summary.one_time %}
+            <tr class="{{ 'row--neg' if line.amount < 0 }}">
+              <td>
+                <span class="strong">{{ line.label }}</span>
+                {% if line.description %}<span class="sub">{{ line.description }}</span>{% endif %}
+                {% if line.is_override %}<span class="sub is-warn">edited by hand</span>{% endif %}
+              </td>
+              <td class="num">{{ line.qty | round | int }} {{ line.unit }}</td>
+              <td class="num">{{ line.unit_price | money }}</td>
+              <td class="num strong">{{ line.amount | money }}</td>
+              {% if is_owner() %}<td class="num">{{ line.internal_cost | money }}</td>{% endif %}
+              <td class="act">
+                <button class="ib" type="button" data-line-edit="{{ line.id }}" title="Edit">
+                  {{ ico('pen') }}
+                </button>
+              </td>
+            </tr>
+            <tr class="row--editor" id="line-{{ line.id }}" hidden>
+              <td colspan="{{ 6 if is_owner() else 5 }}">
+                <form class="row row--wrap" method="post" style="gap:8px"
+                      action="{{ url_for('admin.quote_line_edit', quote_id=quote.id, line_id=line.id) }}">
+                  {{ csrf() }}
+                  <input class="in" name="label" value="{{ line.label }}" placeholder="Label">
+                  <input class="in in--sm" name="qty" type="number" step="0.5" value="{{ line.qty }}"
+                         aria-label="Quantity">
+                  <input class="in in--sm" name="unit_price" type="number" step="1"
+                         value="{{ line.unit_price | round | int }}" aria-label="Unit price">
+                  {% if is_owner() %}
+                  <input class="in in--sm" name="internal_cost" type="number" step="1"
+                         value="{{ line.internal_cost | round | int }}" aria-label="Your cost">
+                  {% endif %}
+                  <input class="in" name="description" value="{{ line.description }}"
+                         placeholder="Description">
+                  <button class="b b--sm" type="submit">Save</button>
+                  <button class="b b--sm b--danger" type="submit" name="remove" value="1"
+                          data-confirm="Remove this line?">Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="3">Taxable value</th>
+              <th class="num">{{ q.taxable_value | money }}</th>
+              {% if is_owner() %}<th class="num">{{ q.internal_cost | money }}</th>{% endif %}
+              <th></th>
+            </tr>
+            {% if q.tax_amount %}
+            <tr>
+              <th colspan="3">GST</th>
+              <th class="num">{{ q.tax_amount | money }}</th>
+              {% if is_owner() %}<th></th>{% endif %}
+              <th></th>
+            </tr>
+            {% endif %}
+            <tr class="row--total">
+              <th colspan="3">Total</th>
+              <th class="num">{{ q.total | money }}</th>
+              {% if is_owner() %}<th class="num">{{ margin | money }}</th>{% endif %}
+              <th></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {% if summary.recurring %}
+      <h3 class="sub-h">Running costs, from year two</h3>
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for line in summary.recurring %}
+          <tr>
+            <td>{{ line.label }}
+              {% if line.description %}<span class="sub">{{ line.description }}</span>{% endif %}</td>
+            <td class="num">{{ line.unit_price | money }} per {{ line.recurring_period | replace('_', ' ') }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="row--total">
+            <th>Yearly equivalent</th>
+            <th class="num">{{ q.recurring_yearly | money }}</th>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">These become recurring items on the project when the quote is accepted,
+      which is what generates the renewal invoices and their reminders.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__b" id="revise">
+      <h3 class="sub-h">Add a line by hand</h3>
+      <form class="row row--wrap" method="post" style="gap:8px"
+            action="{{ url_for('admin.quote_line_add', quote_id=quote.id) }}">
+        {{ csrf() }}
+        <input class="in" name="label" placeholder="What it is" required>
+        <input class="in in--sm" name="qty" type="number" step="0.5" value="1" aria-label="Quantity">
+        <input class="in in--sm" name="unit" value="each" aria-label="Unit">
+        <input class="in in--sm" name="unit_price" type="number" step="1" value="0" aria-label="Price">
+        {% if is_owner() %}
+        <input class="in in--sm" name="internal_cost" type="number" step="1" value="0"
+               aria-label="Your cost">
+        {% endif %}
+        <label class="sw sw--tight">
+          <input type="checkbox" name="is_recurring" value="1">
+          <span class="sw__t"></span><span class="sw__l">Recurring</span>
+        </label>
+        <button class="b b--sm" type="submit">{{ ico('plus') }} Add</button>
+      </form>
+      <p class="hint">A negative price is how you record a one-off discount. The header
+      re-totals from the lines every time, so the two can never drift apart.</p>
+    </div>
+  </section>
+
+  <!-- ── status and schedule ─────────────────────────────────────────── -->
+  <div class="pan pan--4">
+    <h2 class="pan__h">{{ ico('flag') }} Status</h2>
+    <form class="pan__b" method="post" action="{{ url_for('admin.quote_detail', quote_id=quote.id) }}">
+      {{ csrf() }}
+      <div class="grid">
+        <div class="fi fi--12">
+          <label for="status">Where it stands</label>
+          <select class="in" id="status" name="status">
+            {% for code, label in statuses.items() %}
+            <option value="{{ code }}" {{ 'selected' if quote.status == code }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fi fi--12">
+          <label for="title">Title</label>
+          <input class="in" id="title" name="title" value="{{ quote.title or '' }}">
+        </div>
+        <div class="fi fi--12">
+          <label for="valid_until">Valid until</label>
+          <input class="in" id="valid_until" name="valid_until" type="date"
+                 value="{{ quote.valid_until or '' }}">
+        </div>
+        <div class="fi fi--12">
+          <label for="notes">Notes</label>
+          <textarea class="in" id="notes" name="notes" rows="4">{{ quote.notes or '' }}</textarea>
+        </div>
+      </div>
+      <button class="b" type="submit">{{ ico('check') }} Save</button>
+    </form>
+
+    <h2 class="pan__h">{{ ico('coins') }} Payment schedule</h2>
+    <div class="pan__b">
+      <table class="tbl tbl--tight">
+        <tbody>
+          {% for milestone in summary.milestones %}
+          <tr>
+            <td>{{ milestone.label }}<span class="sub">{{ milestone.pct }}%</span></td>
+            <td class="num strong">{{ milestone.amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">Editable under Settings &rsaquo; Documents. Converting the lead creates
+      these as real milestones on the project.</p>
+    </div>
+
+    <h2 class="pan__h">{{ ico('doc') }} Documents</h2>
+    <div class="pan__b">
+      {% if documents %}
+      <ul class="lst">
+        {% for document in documents %}
+        <li>
+          <a href="{{ url_for('admin.document_detail', document_id=document.id) }}">{{ document.ref }}</a>
+          <span>{{ badge(document.status | replace('_', ' ') | title,
+                         'good' if document.status == 'accepted' else '') }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">Nothing in writing yet.
+        <a href="{{ url_for('admin.document_new', quote_id=quote.id, kind='proposal') }}">
+          Build the proposal</a>.</p>
+      {% endif %}
+    </div>
+
+    <div class="pan__b">
+      <span class="lbl">How it was configured</span>
+      <dl class="dl dl--tight">
+        <dt>Pages asked for</dt><dd>{{ quote.pages or 'package default' }}</dd>
+        <dt>Complexity</dt><dd>{{ quote.complexity }}x</dd>
+        <dt>Rush</dt><dd>{{ 'yes' if quote.rush else 'no' }}</dd>
+        <dt>Prepay discount</dt><dd>{{ 'yes' if quote.annual_prepay else 'no' }}</dd>
+        <dt>Referral discount</dt><dd>{{ 'yes' if quote.referral else 'no' }}</dd>
+        <dt>Came from</dt><dd>{{ 'the public calculator' if quote.source == 'public' else 'the panel' }}</dd>
+      </dl>
+      {% if is_owner() %}
+      <form method="post" action="{{ url_for('admin.quote_delete', quote_id=quote.id) }}"
+            data-confirm="Delete {{ quote.ref }} for good?">
+        {{ csrf() }}
+        <button class="b b--sm b--danger" type="submit">{{ ico('trash') }} Delete this quote</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

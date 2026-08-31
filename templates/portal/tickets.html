@@ -1,0 +1,87 @@
+{% extends "portal/base.html" %}
+{% from "public/_icons.html" import ico %}
+
+{# The client's view of support. SLA clocks are deliberately not shown as a countdown
+   here: a timer ticking down on a page the client is watching turns a two-hour fix
+   into an argument about minutes. They see the promise, not the stopwatch. #}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <h1>Support</h1>
+    <p class="lede">Everything you have raised with us, and where each one stands.</p>
+  </div>
+  <a class="btn btn--sm" href="{{ url_for('portal.ticket_new') }}">
+    {{ ico('life') }} Raise a request</a>
+</div>
+
+{% set live = rows | selectattr('status', 'in', ['open', 'in_progress', 'waiting_client']) | list %}
+{% set waiting_on_you = rows | selectattr('status', 'equalto', 'waiting_client') | list %}
+
+{% if waiting_on_you %}
+<div class="banner banner--warn">
+  {{ ico('chat') }}
+  <span><b>{{ waiting_on_you | length }} waiting on you.</b> We have replied and need
+    something back before we can carry on. They are marked below.</span>
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="wrapx">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th scope="col">Reference</th><th scope="col">What it is about</th>
+        <th scope="col">Kind</th><th scope="col">Priority</th>
+        <th scope="col">Raised</th><th scope="col">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="{{ 'is-warn' if row.status == 'waiting_client' }}">
+        <th scope="row">{{ row.ref }}</th>
+        <td>
+          <a href="{{ url_for('portal.ticket', ticket_id=row.id) }}">{{ row.subject }}</a>
+          {% if row.is_change_request %}<br><span class="small">Change request</span>{% endif %}
+        </td>
+        <td>{{ categories.get(row.category, row.category) }}</td>
+        <td><span class="chip chip--{{ row.priority }}">{{ row.priority | upper }}</span></td>
+        <td>{{ row.created_at | date_fmt }}</td>
+        <td><span class="chip chip--{{ row.status }}">
+          {{ statuses.get(row.status, row.status) }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="small">{{ live | length }} open of {{ rows | length }} raised.</p>
+{% else %}
+<p class="empty">Nothing raised yet. If something is broken, slow or just not what you
+  expected, <a href="{{ url_for('portal.ticket_new') }}">tell us here</a> rather than
+  waiting for a call.</p>
+{% endif %}
+
+<section class="psec">
+  <div class="psec__h"><h2>{{ ico('clock') }} What we promise</h2></div>
+  <div class="wrapx">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">Priority</th><th scope="col">When we reply</th>
+          <th scope="col">When it is fixed</th></tr>
+      </thead>
+      <tbody>
+        {% for code, label in priorities.items() %}
+        {% set p = policies[code] %}
+        <tr>
+          <th scope="row">{{ label }}</th>
+          <td>{{ p.response_hours | round | int }} hours</td>
+          <td>{{ p.resolve_hours | round | int }} hours</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small">Working hours, not wall-clock. A P1 raised at midnight is answered first
+    thing, and if it is genuinely down, call the number in the footer as well.</p>
+</section>
+{% endblock %}

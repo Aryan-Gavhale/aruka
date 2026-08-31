@@ -1,0 +1,128 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import page_hero, sec_head, plan_card, faq_list, faq_jsonld,
+   cta_band, marquee_band, page_blocks with context %}
+
+{% block jsonld %}{{ faq_jsonld(faqs) }}{% endblock %}
+
+{% block content %}
+{% call page_hero(page, 'Services', 'What we actually do',
+                  'Four service lines. Each one has a scope, a timeline and a price, and
+                   none of them is a retainer you cannot leave.',
+                  trail=[('Services', none)]) %}
+<div class="btns mt r r--none" style="--d:200ms">
+  <a class="btn" href="{{ url_for('public.contact') }}" data-magnet="5">
+    Start a project {{ ico('arrow') }}</a>
+  {% if calculator_on %}
+  <a class="btn btn--ghost" href="{{ url_for('public.pricing_page') }}">
+    {{ ico('calc') }} Price it yourself</a>
+  {% endif %}
+</div>
+{% endcall %}
+
+{# One long section per service rather than a grid of cards, because the decision
+   a visitor is making here needs the detail on the page. #}
+{% for row in rows %}
+<section class="sec {{ 'sec--alt' if loop.index0 is even }}" id="{{ row.slug }}">
+  <div class="wrap g-side">
+    <div>
+      <span class="eye r">{{ '%02d' % loop.index }} &middot; {{ row.tagline or 'Service' }}</span>
+      <h2 class="r r--none">
+        <a href="{{ url_for('public.service', slug=row.slug) }}">{{ row.name }}</a>
+      </h2>
+      <div class="prose r">{{ (row.summary or '') | md_lite }}</div>
+
+      {% if row.features %}
+      <div class="grid g2 mt">
+        <div class="r">
+          <h4>What is included</h4>
+          <ul class="ticks">
+            {% for line in row.features | bullets %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% if row.deliverables %}
+        <div class="r">
+          <h4>What you get handed</h4>
+          <ul class="ticks">
+            {% for line in row.deliverables | bullets %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="btns mt r">
+        <a class="btn btn--ghost" href="{{ url_for('public.service', slug=row.slug) }}">
+          {{ row.name }} in detail {{ ico('arrow') }}</a>
+      </div>
+    </div>
+
+    <aside class="card r r--right">
+      <span class="card__i">{{ ico(row.icon or 'spark') }}</span>
+      <dl class="dl">
+        {% if row.price_from %}
+        <dt>Starts at</dt><dd>{{ row.price_from | money }}</dd>
+        {% endif %}
+        {% if row.timeline %}
+        <dt>Timeline</dt><dd>{{ row.timeline }}</dd>
+        {% endif %}
+        {% if row.ideal_for %}
+        <dt>Ideal for</dt><dd>{{ row.ideal_for }}</dd>
+        {% endif %}
+      </dl>
+      <a class="btn btn--block mt" href="{{ url_for('public.contact', service=row.name) }}">
+        Enquire about this</a>
+    </aside>
+  </div>
+</section>
+{% else %}
+<section class="sec">
+  <div class="wrap">
+    <div class="empty">
+      {{ ico('layers') }}
+      <h3>Nothing published yet</h3>
+      <p>Service lines are added in the panel. Once one is published it appears here with
+        its own page.</p>
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+{{ marquee_band() }}
+
+{% if packages %}
+<section class="sec">
+  <div class="wrap">
+    {{ sec_head('Packages', 'What it costs to start',
+                'Fixed-scope packages for the most common briefs. Anything outside them is
+                 quoted the same way, from the same rate card.', mid=true) }}
+    <div class="plans">
+      {% for pkg in packages[:3] %}{{ plan_card(pkg) }}{% endfor %}
+    </div>
+    {% if packages | length > 3 %}
+    <div class="plans mt">
+      {% for pkg in packages[3:6] %}{{ plan_card(pkg) }}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="btns btns--mid mt">
+      <a class="btn btn--ghost" href="{{ url_for('public.pricing_page') }}">
+        Full pricing {{ ico('arrow') }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if faqs %}
+<section class="sec sec--alt">
+  <div class="wrap wrap--tight">
+    {{ sec_head('Questions', 'Before you enquire', mid=true) }}
+    {{ faq_list(faqs) }}
+  </div>
+</section>
+{% endif %}
+
+{{ page_blocks(blocks) }}
+{{ cta_band('Not sure which of these you need?',
+            'Describe the problem rather than the solution. We will tell you which service
+             line it is, or that it is none of them.') }}
+{% endblock %}

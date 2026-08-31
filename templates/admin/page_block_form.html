@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.pages_list') }}">Pages</a> &rsaquo;
+  <a href="{{ url_for('admin.page_blocks', page_id=page.id) }}">{{ page.title }}</a> &rsaquo;
+  {{ block.name or block.kind }}</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" data-guard>
+  {{ csrf() }}
+
+  <div class="pan pan--narrow">
+    <div class="pan__h">{{ ico('layout') }} <h2>{{ block.name or block.kind }}</h2></div>
+    <div class="pan__b">
+      <div class="grid">
+        <div class="fi fi--12">
+          <label for="name">What to call it here</label>
+          <input class="in" id="name" name="name" value="{{ block.name }}">
+          <span class="hint">Only you see this. It is what the block list shows.</span>
+        </div>
+
+        {% for name, label, kind in spec %}
+        <div class="fi fi--12">
+          <label for="f-{{ name }}">{{ label }}</label>
+          {% if kind == 'textarea' %}
+          <textarea class="in" id="f-{{ name }}" name="{{ name }}" rows="6">{{ data.get(name, '') }}</textarea>
+          {% if '|' in label %}
+          <span class="hint">One per line, with a vertical bar between the two parts.</span>
+          {% endif %}
+          {% else %}
+          <input class="in" id="f-{{ name }}" name="{{ name }}" value="{{ data.get(name, '') }}">
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <label class="sw">
+        <input type="checkbox" name="is_published" value="1" {{ 'checked' if block.is_published }}>
+        <span class="sw__t"></span>
+        <span class="sw__l">Show it on the page
+          <span>Off keeps the block and its content but stops it rendering.</span></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button class="b" type="submit">{{ ico('save') }} Save the block</button>
+    <a class="b b--ghost" href="{{ url_for('admin.page_blocks', page_id=page.id) }}">Back</a>
+    <span class="spacer"></span>
+    <button class="b b--sm b--danger" type="submit" form="block-delete"
+            data-confirm="Remove this block?">{{ ico('trash') }} Remove</button>
+  </div>
+</form>
+
+<form id="block-delete" method="post" hidden
+      action="{{ url_for('admin.page_block_delete', block_id=block.id) }}">
+  {{ csrf() }}
+</form>
+
+{% endblock %}

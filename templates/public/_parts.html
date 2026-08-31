@@ -1,0 +1,378 @@
+{# Pieces that appear on more than one public page.
+
+   Anything that repeats twice lives here rather than being pasted, because the
+   copy in these blocks gets edited under pressure and two versions of a CTA is
+   how a stale phone number survives on one page for a year. #}
+{% from "public/_icons.html" import ico %}
+
+{# ── forms ───────────────────────────────────────────────────────────────────
+   Every public form carries the same three hidden fields. The honeypot is a real
+   labelled input placed off-screen, so a bot reading the HTML fills it in and a
+   screen reader is told to skip it. `opened_at` is stamped by site.js rather than
+   rendered, so a cached page cannot make a slow human look like a script. #}
+{% macro form_guard() %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="opened_at" value="">
+<div class="hp" aria-hidden="true">
+  <label for="website-hp">Website</label>
+  <input type="text" id="website-hp" name="website" tabindex="-1" autocomplete="off">
+</div>
+{% endmacro %}
+
+{# Carry the campaign through the form, so a lead from an ad keeps its source. #}
+{% macro utm_fields() %}
+{% for key in ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] %}
+{% if request.args.get(key) %}
+<input type="hidden" name="{{ key }}" value="{{ request.args.get(key) }}">
+{% endif %}
+{% endfor %}
+<input type="hidden" name="landing_page" value="{{ request.full_path | truncate(180, true, '') }}">
+{% endmacro %}
+
+{% macro field(name, label, kind='text', required=false, placeholder='', help='', value='', span='') %}
+<div class="fi {{ span }}">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <em>*</em>{% endif %}</label>
+  {% if kind == 'textarea' %}
+  <textarea class="in" id="f-{{ name }}" name="{{ name }}" rows="5"
+            placeholder="{{ placeholder }}"{% if required %} required{% endif %}>{{ value }}</textarea>
+  {% else %}
+  <input class="in" id="f-{{ name }}" name="{{ name }}" type="{{ kind }}" value="{{ value }}"
+         placeholder="{{ placeholder }}"{% if required %} required{% endif %}
+         {% if kind == 'tel' %}inputmode="tel" autocomplete="tel"{% endif %}
+         {% if kind == 'email' %}autocomplete="email"{% endif %}>
+  {% endif %}
+  {% if help %}<span class="fi__h">{{ help }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro select_field(name, label, options, blank='', help='', value='', span='') %}
+<div class="fi {{ span }}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <select class="in" id="f-{{ name }}" name="{{ name }}">
+    {% if blank %}<option value="">{{ blank }}</option>{% endif %}
+    {% for option in options %}
+    {% set key = option[0] if option is sequence and option is not string else option %}
+    {% set text = option[1] if option is sequence and option is not string else option %}
+    <option value="{{ key }}" {{ 'selected' if value == key }}>{{ text }}</option>
+    {% endfor %}
+  </select>
+  {% if help %}<span class="fi__h">{{ help }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{# ── page furniture ──────────────────────────────────────────────────────── #}
+{% macro crumbs(trail) %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ url_for('public.home') }}">Home</a>
+  {% for label, href in trail %}
+  <span aria-hidden="true">/</span>
+  {% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}
+  {% endfor %}
+</nav>
+{% endmacro %}
+
+{% macro page_hero(page, fallback_kicker='', fallback_heading='', fallback_intro='', trail=none) %}
+<section class="hero hero--page">
+  <div class="mesh" aria-hidden="true"><i class="mesh__b"></i><i class="mesh__b"></i><i class="mesh__b"></i></div>
+  <div class="wrap">
+    {% if trail %}{{ crumbs(trail) }}{% endif %}
+    {% set kicker = (page.kicker if page and page.kicker else fallback_kicker) %}
+    {% if kicker %}<span class="eye r r--none">{{ kicker }}</span>{% endif %}
+    <h1 class="r r--none" data-split>{{ page.heading if page and page.heading else (fallback_heading or (page.title if page else '')) }}</h1>
+    {% set intro = (page.intro if page and page.intro else fallback_intro) %}
+    {% if intro %}<p class="lede r r--none" style="--d:120ms; max-width:52ch">{{ intro }}</p>{% endif %}
+    {% if caller %}{{ caller() }}{% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{% macro sec_head(eyebrow, heading, body='', mid=false) %}
+<div class="sec__h {{ 'sec__h--mid' if mid }} r">
+  {% if eyebrow %}<span class="eye">{{ eyebrow }}</span>{% endif %}
+  <h2>{{ heading }}</h2>
+  {% if body %}<p>{{ body }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{# A drawn-by-hand underline. The path length is measured by site.js and the stroke
+   drawn in as the heading scrolls up, so it reads as written rather than printed.
+   Decorative, hence aria-hidden and no text alternative. #}
+{% macro flourish() %}
+<svg class="squig draw r r--none" viewBox="0 0 232 14" fill="none" aria-hidden="true">
+  <path d="M3 9.5c28-8 55-8 82 0s54 7.5 81-0.5 44-5 63 2.5" stroke="currentColor"
+        stroke-width="2.6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+</svg>
+{% endmacro %}
+
+{% macro marquee_band(heading='') %}
+{% if marquee %}
+<div class="marq" role="region" aria-label="{{ heading or 'What we build with' }}">
+  <div class="marq__t">
+    <div class="marq__g">
+      {% for row in marquee %}<span class="marq__i">{{ row.label }}</span>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro stat_band(stats) %}
+{% if stats %}
+<div class="stats r">
+  {% for row in stats %}
+  <div class="stat">
+    <b>{% if row.prefix %}<i>{{ row.prefix }}</i>{% endif %}<span
+      data-count="{{ row.value }}">{{ row.value | int }}</span>{% if row.suffix %}<i>{{ row.suffix }}</i>{% endif %}</b>
+    <span>{{ row.label }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# ── cards ───────────────────────────────────────────────────────────────── #}
+{% macro service_card(row, numbered=false, index=0) %}
+<a class="card r" href="{{ url_for('public.service', slug=row.slug) }}" data-tilt="4">
+  {% if numbered %}<span class="card__n" aria-hidden="true">{{ '%02d' % (index + 1) }}</span>{% endif %}
+  <span class="card__i">{{ ico(row.icon or 'spark') }}</span>
+  <h3>{{ row.name }}</h3>
+  <p>{{ row.tagline or row.summary | truncate(120) }}</p>
+  {% if row.price_from %}
+  <div class="tags"><span class="tag">From {{ row.price_from | money }}</span>
+    {% if row.timeline %}<span class="tag">{{ row.timeline }}</span>{% endif %}</div>
+  {% endif %}
+  <span class="card__more">Read more {{ ico('arrow') }}</span>
+</a>
+{% endmacro %}
+
+{% macro work_card(row) %}
+<a class="work__c r" href="{{ url_for('public.case_study', slug=row.slug) }}">
+  <div class="work__img">
+    {% if row.media_id %}
+    <img src="{{ media_url(row.media_id) }}" alt="{{ media_alt(row.media_id) or row.title }}"
+         loading="lazy" width="640" height="440">
+    {% else %}
+    <span class="work__ph" aria-hidden="true">{{ (row.client_name or row.title) | initials }}</span>
+    {% endif %}
+  </div>
+  <div class="work__b">
+    {% if row.client_name %}<span class="work__cl">{{ row.client_name }}</span>{% endif %}
+    <h3>{{ row.title }}</h3>
+    <p>{{ row.summary | truncate(130) }}</p>
+  </div>
+</a>
+{% endmacro %}
+
+{% macro quote_card(row) %}
+<figure class="quote r">
+  <span class="quote__m" aria-hidden="true">&ldquo;</span>
+  {% if row.rating %}
+  <div class="stars" aria-label="{{ row.rating }} out of 5">
+    {% for _ in range(row.rating | int) %}{{ ico('star') }}{% endfor %}
+  </div>
+  {% endif %}
+  <blockquote><p>{{ row.quote }}</p></blockquote>
+  <figcaption class="quote__w">
+    {% if row.media_id %}
+    <img class="quote__av" src="{{ media_url(row.media_id, 'thumb') }}" alt="" width="42" height="42">
+    {% else %}
+    <span class="quote__av" aria-hidden="true">{{ row.author | initials }}</span>
+    {% endif %}
+    <span>
+      <span class="quote__n">{{ row.author }}</span>
+      <span class="quote__c">{{ row.role }}{% if row.role and row.company %}, {% endif %}{{ row.company }}</span>
+    </span>
+  </figcaption>
+</figure>
+{% endmacro %}
+
+{% macro plan_card(pkg, cta_label='Start with this', cta_url=none) %}
+<div class="plan r {{ 'plan--pop' if pkg.is_featured }}">
+  {% if pkg.is_featured %}<span class="plan__flag">Most chosen</span>{% endif %}
+  <h3>{{ pkg.name }}</h3>
+  <p class="plan__for">{{ pkg.tagline or pkg.best_for }}</p>
+  <div class="plan__p">
+    {% if pkg.is_from_price %}<span>from</span>{% endif %}
+    <b>{{ pkg.price | money }}</b>
+    <span>+ GST</span>
+  </div>
+  <p class="plan__from">
+    {{ pkg.pages_included }} page{{ 's' if pkg.pages_included != 1 }} &middot;
+    {{ pkg.delivery_days }} working days
+    {% if pkg.support_months %}&middot; {{ pkg.support_months }} month{{ 's' if pkg.support_months != 1 }} support{% endif %}
+  </p>
+  <ul class="ticks">
+    {% for line in pkg.features | bullets %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% if pkg.excluded %}
+  <ul class="ticks ticks--no">
+    {% for line in pkg.excluded | bullets %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <a class="btn {{ '' if pkg.is_featured else 'btn--ghost' }} btn--block"
+     href="{{ cta_url or url_for('public.contact', package=pkg.slug) }}">{{ cta_label }}</a>
+  {% if pkg.recurring_yearly %}
+  <p class="plan__t">Then {{ pkg.recurring_yearly | money }} a year for
+    {{ pkg.recurring_label or 'hosting and care' }}.</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ── FAQ ─────────────────────────────────────────────────────────────────── #}
+{% macro faq_list(rows) %}
+{% if rows %}
+<div class="faq">
+  {% for row in rows %}
+  <div class="faq__i r r--none">
+    <button class="faq__q" type="button" aria-controls="faq-{{ row.id }}">
+      <span>{{ row.question }}</span>
+      <span class="faq__s" aria-hidden="true"></span>
+    </button>
+    <div class="faq__a" id="faq-{{ row.id }}" role="region">
+      <div>{{ row.answer | md_lite }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# The FAQ schema block, which is what earns the expandable results in Google.
+   Only ever emitted for questions actually on the page. #}
+{% macro faq_jsonld(rows) %}
+{% if rows %}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{% for row in rows %}
+  {"@type": "Question", "name": {{ row.question | tojson }},
+   "acceptedAnswer": {"@type": "Answer", "text": {{ row.answer | tojson }}}}{{ "," if not loop.last }}
+{% endfor %}
+]}
+</script>
+{% endif %}
+{% endmacro %}
+
+{# ── the closing call to action ──────────────────────────────────────────── #}
+{% macro cta_band(heading='', body='', primary_label='Start a project', note='') %}
+<section class="sec">
+  <div class="wrap">
+    <div class="cta r">
+      <span class="eye" style="justify-content:center">{{ S('brand.short') or brand_name }}</span>
+      <h2>{{ heading or 'Tell us what you are trying to build' }}</h2>
+      <p>{{ body or 'One call, a written scope and a fixed price. If we are not the right
+        studio for it we will say so on that call rather than three weeks in.' }}</p>
+      <div class="btns btns--mid">
+        <a class="btn btn--lg" href="{{ url_for('public.contact') }}" data-magnet="5">
+          {{ primary_label }} {{ ico('arrow') }}</a>
+        {% if wa_link %}
+        <a class="btn btn--wa btn--lg" href="{{ wa_link }}" target="_blank" rel="noopener">
+          {{ ico('whatsapp') }} WhatsApp</a>
+        {% endif %}
+      </div>
+      <p class="cta__f">{{ note or 'Replies within one working day. No sales sequence, no
+        retainer you cannot leave.' }}</p>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{# ── database-driven page blocks ──────────────────────────────────────────────
+   The seven kinds the editor can add. A block whose kind is not handled renders
+   nothing rather than raising, so removing a kind from the panel later cannot
+   take a live page down. #}
+{% macro page_blocks(blocks) %}
+{% for block in blocks %}
+{% set data = block.data %}
+
+{% if block.kind == 'richtext' %}
+<section class="sec sec--tight">
+  <div class="wrap wrap--tight">
+    {% if data.heading %}<h2 class="r">{{ data.heading }}</h2>{% endif %}
+    <div class="prose r">{{ data.body | md_lite }}</div>
+  </div>
+</section>
+
+{% elif block.kind == 'cta' %}
+<section class="sec sec--tight">
+  <div class="wrap">
+    <div class="cta r">
+      <h2>{{ data.heading }}</h2>
+      {% if data.body %}<p>{{ data.body }}</p>{% endif %}
+      {% if data.button_label %}
+      <div class="btns btns--mid">
+        <a class="btn btn--lg" href="{{ data.button_url or url_for('public.contact') }}"
+           data-magnet="5">{{ data.button_label }} {{ ico('arrow') }}</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% elif block.kind == 'stats' %}
+<section class="sec sec--tight">
+  <div class="wrap">
+    {% if data.heading %}<div class="sec__h sec__h--mid r"><h2>{{ data.heading }}</h2></div>{% endif %}
+    <div class="stats r">
+      {% for line in data.items | bullets %}
+      {% set bits = line.split('|') %}
+      <div class="stat">
+        <b>{{ bits[0] | trim }}</b>
+        <span>{{ bits[1] | trim if bits | length > 1 else '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% elif block.kind == 'steps' %}
+<section class="sec sec--tight">
+  <div class="wrap wrap--tight">
+    {% if data.heading %}<div class="sec__h r"><h2>{{ data.heading }}</h2></div>{% endif %}
+    <div class="steps">
+      {% for line in data.items | bullets %}
+      {% set bits = line.split('|') %}
+      <div class="steps__i r r--none">
+        <div>
+          <h3>{{ bits[0] | trim }}</h3>
+          {% if bits | length > 1 %}<p>{{ bits[1] | trim }}</p>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% elif block.kind == 'logos' %}
+<section class="sec sec--tight sec--flush">
+  {% if data.heading %}
+  <div class="wrap"><div class="sec__h sec__h--mid r"><span class="eye">{{ data.heading }}</span></div></div>
+  {% endif %}
+  {{ marquee_band(data.heading) }}
+</section>
+
+{% elif block.kind == 'faq' %}
+<section class="sec sec--tight">
+  <div class="wrap wrap--tight">
+    {% if data.heading %}<div class="sec__h r"><h2>{{ data.heading }}</h2></div>{% endif %}
+    {{ faq_list(faqs_in(data.category or 'general')) }}
+  </div>
+</section>
+
+{% elif block.kind == 'quote' %}
+<section class="sec sec--tight">
+  <div class="wrap wrap--tight">
+    <figure class="quote r">
+      <span class="quote__m" aria-hidden="true">&ldquo;</span>
+      <blockquote><p>{{ data.quote }}</p></blockquote>
+      {% if data.author %}
+      <figcaption class="quote__w">
+        <span class="quote__av" aria-hidden="true">{{ data.author | initials }}</span>
+        <span class="quote__n">{{ data.author }}</span>
+      </figcaption>
+      {% endif %}
+    </figure>
+  </div>
+</section>
+{% endif %}
+{% endfor %}
+{% endmacro %}

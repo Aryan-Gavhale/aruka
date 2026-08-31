@@ -1,0 +1,113 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb"><a href="{{ url_for('admin.leads_list') }}">Leads</a> &rsaquo; New</p>
+{% endblock %}
+
+{% block content %}
+
+<form class="pan" method="post" action="{{ url_for('admin.lead_new') }}">
+  {{ csrf() }}
+  <div class="pan__b">
+    <div class="grid">
+      <div class="fi fi--6">
+        <label for="name">Name <em>*</em></label>
+        <input class="in" id="name" name="name" required autofocus>
+      </div>
+      <div class="fi fi--6">
+        <label for="company">Company</label>
+        <input class="in" id="company" name="company">
+      </div>
+      <div class="fi fi--4">
+        <label for="email">Email</label>
+        <input class="in" id="email" name="email" type="email">
+      </div>
+      <div class="fi fi--4">
+        <label for="phone">Phone</label>
+        <input class="in" id="phone" name="phone" type="tel" placeholder="98765 43210">
+      </div>
+      <div class="fi fi--4">
+        <label for="whatsapp">WhatsApp</label>
+        <input class="in" id="whatsapp" name="whatsapp" type="tel">
+        <span class="hint">Left blank, the phone number is used.</span>
+      </div>
+
+      <div class="fi fi--12 fhead"><h3>Where it came from</h3></div>
+      <div class="fi fi--4">
+        <label for="source_id">Source</label>
+        <select class="in" id="source_id" name="source_id">
+          <option value="">Not recorded</option>
+          {% for row in sources %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--4">
+        <label for="source_note">Source detail</label>
+        <input class="in" id="source_note" name="source_note" placeholder="Referred by Anil, Rotary event">
+      </div>
+      <div class="fi fi--4">
+        <label for="city">City</label>
+        <input class="in" id="city" name="city">
+      </div>
+
+      <div class="fi fi--12 fhead"><h3>What they want</h3></div>
+      <div class="fi fi--4">
+        <label for="service_interest">Service</label>
+        <input class="in" id="service_interest" name="service_interest" list="service-list">
+        <datalist id="service-list">
+          {% for row in services %}<option value="{{ row.name }}">{% endfor %}
+        </datalist>
+      </div>
+      <div class="fi fi--4">
+        <label for="budget_band">Budget band</label>
+        <select class="in" id="budget_band" name="budget_band">
+          <option value="">Not discussed</option>
+          {% for band in S('crm.budget_bands') %}<option value="{{ band }}">{{ band }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--4">
+        <label for="quote_value">Expected value</label>
+        <div class="wrapin">
+          <span class="fix">&#8377;</span>
+          <input class="in" id="quote_value" name="quote_value" type="number" step="1" value="0">
+        </div>
+      </div>
+      <div class="fi fi--12">
+        <label for="message">What they said</label>
+        <textarea class="in" id="message" name="message" rows="4"></textarea>
+      </div>
+
+      <div class="fi fi--12 fhead"><h3>Working it</h3></div>
+      <div class="fi fi--4">
+        <label for="stage">Stage</label>
+        <select class="in" id="stage" name="stage">
+          {% for code in STAGES %}
+          <option value="{{ code }}" {{ 'selected' if code == 'new' }}>{{ STAGE_LABELS[code] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fi fi--4">
+        <label for="next_followup_on">Follow up on</label>
+        <input class="in" id="next_followup_on" name="next_followup_on" type="date">
+        <span class="hint">Blank books one {{ S('crm.followup_days') }} day(s) out.</span>
+      </div>
+      <div class="fi fi--4">
+        <label for="tags">Tags</label>
+        <input class="in" id="tags" name="tags" placeholder="retainer, referral">
+      </div>
+      <div class="fi fi--12">
+        <label for="followup_note">Follow-up note</label>
+        <input class="in" id="followup_note" name="followup_note"
+               placeholder="Call after their board meeting on Thursday">
+      </div>
+    </div>
+  </div>
+
+  <div class="pan__f">
+    <button class="b" type="submit">{{ ico('check') }} Add lead</button>
+    <a class="b b--ghost" href="{{ url_for('admin.leads_list') }}">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

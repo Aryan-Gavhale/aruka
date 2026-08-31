@@ -1,0 +1,141 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import ico %}
+{% from "public/_parts.html" import page_hero, sec_head, faq_list, faq_jsonld, form_guard,
+   utm_fields, field, select_field, page_blocks with context %}
+
+{% block jsonld %}
+{{ faq_jsonld(faqs) }}
+<script type="application/ld+json" nonce="{{ csp_nonce() }}">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  "name": "Contact " ~ brand_name,
+  "url": request.base_url
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block content %}
+{{ page_hero(page, 'Contact', 'Tell us what you are building',
+             'One form, and a reply from the person who would actually do the work. Within
+              one working day, usually sooner.',
+             trail=[('Contact', none)]) }}
+
+<section class="sec sec--flush">
+  <div class="wrap g-side">
+
+    <form class="f f2" method="post" action="{{ url_for('public.contact') }}"
+          data-timed data-once>
+      {{ form_guard() }}
+      {{ utm_fields() }}
+
+      {{ field('name', 'Your name', 'text', required=true, placeholder='Priya Sharma') }}
+      {{ field('company', 'Business name', 'text', placeholder='Optional') }}
+      {{ field('email', 'Email', 'email', placeholder='you@company.in',
+               help='Either this or a phone number.') }}
+      {{ field('phone', 'Phone or WhatsApp', 'tel', placeholder='+91 90000 00000') }}
+      {{ field('city', 'City', 'text', placeholder='Pune') }}
+
+      {{ select_field('service', 'What do you need?',
+                      services | map(attribute='name') | list,
+                      blank='Not sure yet', value=request.args.get('service', '')) }}
+
+      {% if budget_bands %}
+      {{ select_field('budget', 'Rough budget', budget_bands,
+                      blank='Prefer not to say',
+                      help='An honest range saves us both a call.', span='fi--wide') }}
+      {% endif %}
+
+      <div class="fi fi--wide">
+        <label for="f-message">What are you trying to fix? <em>*</em></label>
+        <textarea class="in" id="f-message" name="message" rows="6"
+                  placeholder="What you have now, what it needs to do, and any date you are working towards."></textarea>
+        <span class="fi__h">The more specific this is, the more useful the reply.</span>
+      </div>
+
+      {{ field('referral_code', 'Referral code', 'text',
+               placeholder='If a client sent you', span='fi--wide',
+               value=request.args.get('ref', ''),
+               help='Worth ' ~ S('pricing.referral_discount_pct') | string ~ '% off, for you and for them.') }}
+
+      <div class="fi fi--wide">
+        <label class="consent">
+          <input type="checkbox" name="consent" value="1" required>
+          <span>I am happy for {{ brand_name }} to contact me about this enquiry. Details are
+            handled as set out in the
+            <a href="{{ url_for('public.legal', slug='privacy-policy') }}">privacy policy</a>.</span>
+        </label>
+      </div>
+
+      <div class="fi fi--wide">
+        <button class="btn btn--lg" type="submit" data-busy="Sending&hellip;" data-magnet="4">
+          Send it {{ ico('arrow') }}</button>
+      </div>
+    </form>
+
+    <aside>
+      <div class="card r r--right">
+        <h4>Or reach us directly</h4>
+        <div class="stack" style="margin-top:16px">
+          {% if wa_link %}
+          <a class="mini" href="{{ wa_link }}" target="_blank" rel="noopener">
+            <span class="mini__i">{{ ico('whatsapp') }}</span>
+            <span><span class="mini__t">WhatsApp</span>
+              <span class="mini__s">Fastest during working hours</span></span>
+          </a>
+          {% endif %}
+          {% if contact.email %}
+          <a class="mini" href="mailto:{{ contact.email }}">
+            <span class="mini__i">{{ ico('mail') }}</span>
+            <span><span class="mini__t">{{ contact.email }}</span>
+              <span class="mini__s">Everything is read</span></span>
+          </a>
+          {% endif %}
+          {% if contact.phone_display %}
+          <a class="mini" href="tel:{{ contact.phone | replace(' ', '') }}">
+            <span class="mini__i">{{ ico('phone') }}</span>
+            <span><span class="mini__t">{{ contact.phone_display }}</span>
+              <span class="mini__s">{{ contact.hours_note }}</span></span>
+          </a>
+          {% endif %}
+          {% if contact.address %}
+          <div class="mini">
+            <span class="mini__i">{{ ico('pin') }}</span>
+            <span><span class="mini__t">{{ contact.address }}</span>
+              <span class="mini__s">Visits by appointment</span></span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="banner banner--ok mt">
+        {{ ico('check') }}
+        <span><b>Already a client?</b> Support requests go through
+          <a href="{{ url_for('public.support') }}">the support desk</a> so they get a
+          reference and a response time.</span>
+      </div>
+
+      {% if calculator_on %}
+      <div class="card mt r r--right">
+        <span class="card__i">{{ ico('calc') }}</span>
+        <h3>Want a number first?</h3>
+        <p>Price a build yourself in about a minute, then decide whether to send this form.</p>
+        <a class="btn btn--ghost btn--block mt" href="{{ url_for('public.pricing_page') }}">
+          Open the calculator</a>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+{% if faqs %}
+<section class="sec sec--alt">
+  <div class="wrap wrap--tight">
+    {{ sec_head('Questions', 'Before you send it', mid=true) }}
+    {{ faq_list(faqs) }}
+  </div>
+</section>
+{% endif %}
+
+{{ page_blocks(blocks) }}
+{% endblock %}

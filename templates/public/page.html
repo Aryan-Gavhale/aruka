@@ -1,0 +1,14 @@
+{% extends "public/base.html" %}
+{% from "public/_parts.html" import page_hero, cta_band, page_blocks with context %}
+
+{# Any page the owner adds in the panel that has no template of its own. The blocks
+   are the whole page here, so a new page is a real page rather than a stub. #}
+{% block content %}
+{{ page_hero(page, '', '', '', trail=[(page.title, none)]) }}
+
+{% if blocks %}
+{{ page_blocks(blocks) }}
+{% endif %}
+
+{{ cta_band() }}
+{% endblock %}

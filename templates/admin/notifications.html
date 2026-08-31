@@ -1,0 +1,86 @@
+{% extends "admin/base.html" %}
+{% from "admin/_fields.html" import csrf, badge %}
+{% from "admin/_icons.html" import ico %}
+
+{% block crumb %}
+<p class="crumb">Notifications</p>
+{% endblock %}
+
+{% block actions %}
+<form method="post">
+  {{ csrf() }}
+  <button class="b b--sm b--ghost" type="submit" name="action" value="sweep">
+    {{ ico('refresh') }} Run the digest
+  </button>
+  <button class="b b--sm b--ghost" type="submit" name="action" value="read_all">
+    {{ ico('check') }} Mark all read
+  </button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="grid">
+  <section class="pan pan--7">
+    <div class="pan__h">
+      {{ ico('bell') }} <h2>Recent</h2>
+      <p>Raised by the digest sweep and by anything a client does on their own - accepting a
+        proposal, replying to a ticket, paying an invoice.</p>
+    </div>
+    <div class="pan__b pan__b--flush">
+      {% if rows %}
+      <table class="tbl">
+        <tbody>
+          {% for row in rows %}
+          <tr class="{{ 'is-unread' if not row.is_read }}">
+            <td style="width:26px">
+              <span class="dot dot--{{ row.kind }}" title="{{ row.kind }}"></span>
+            </td>
+            <td>
+              <b>{{ row.title }}</b>
+              {% if row.body %}<span class="sub">{{ row.body | shorten(110) }}</span>{% endif %}
+            </td>
+            <td class="num"><span class="sub">{{ row.created_at | ago }}</span></td>
+            <td class="act">
+              {% if row.url %}
+              <form method="post" action="{{ url_for('admin.notification_read', row_id=row.id) }}">
+                {{ csrf() }}
+                <button class="b b--sm b--plain" type="submit">Open</button>
+              </form>
+              {% elif not row.is_read %}
+              <form method="post" action="{{ url_for('admin.notification_read', row_id=row.id) }}">
+                {{ csrf() }}
+                <button class="b b--sm b--ghost" type="submit">Mark read</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">
+        {{ ico('bell') }}
+        <h3>Nothing to report</h3>
+        <p>Run the digest to raise notifications for overdue follow-ups, tickets past their
+          promise, renewals and expiring domains.</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="pan pan--5">
+    <div class="pan__h">
+      {{ ico('note') }} <h2>Today's digest</h2>
+      <span class="spacer"></span>
+      <button class="b b--sm b--ghost" type="button" data-copy="#digest">{{ ico('copy') }} Copy</button>
+    </div>
+    <div class="pan__b">
+      <p class="hint">The same text <code>python app.py digest</code> prints, so a cron job can
+        mail it to you every morning without this panel being open.</p>
+      <textarea class="in in--code" id="digest" rows="26" readonly>{{ digest_text }}</textarea>
+    </div>
+  </section>
+</div>
+
+{% endblock %}
