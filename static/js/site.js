@@ -370,6 +370,75 @@
     });
   });
 
+  /* ── the calculator folds up on a phone ─────────────────────────────────────
+     Eleven groups of options one under the other is seventeen screens of scrolling,
+     which is not a price list anybody reads to the end. Each group becomes a header
+     you tap, with the package open to begin with because that is where an estimate
+     starts and everything below only adjusts it.
+
+     Nothing is taken away. The inputs stay in the form whether their group is showing
+     or not, so the running total, the itemised lines and the estimate that gets saved
+     are all exactly what they were.
+
+     A desktop keeps every group open. There is a column of room for them there, and a
+     rate card you can see all of beats one you have to click through.
+     ───────────────────────────────────────────────────────────────────────── */
+  const foldQuery = window.matchMedia('(max-width: 620px)');
+  const foldSets = $$('.calc .fset').filter((set) => $('.opts', set));
+
+  foldSets.forEach((set, index) => {
+    const legend = $('legend', set);
+    if (!legend) return;
+
+    // Everything below the legend moves into one box, so opening and closing is a
+    // single display switch and each part keeps the layout it was written with.
+    const body = document.createElement('div');
+    body.className = 'fset__b';
+    while (legend.nextSibling) body.append(legend.nextSibling);
+    set.append(body);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'fset__t';
+    toggle.append(legend.textContent.trim());
+    const count = $$('.opt', body).length;
+    if (count) {
+      const tally = document.createElement('span');
+      tally.className = 'fset__n';
+      tally.textContent = count === 1 ? '1 option' : count + ' options';
+      toggle.append(tally);
+    }
+    legend.textContent = '';
+    legend.append(toggle);
+
+    toggle.addEventListener('click', () => {
+      if (!foldQuery.matches) return;
+      toggle.setAttribute('aria-expanded', String(set.classList.toggle('is-open')));
+    });
+    if (index === 0) set.dataset.open = '1';
+  });
+
+  const applyFold = () => {
+    const folding = foldQuery.matches;
+    foldSets.forEach((set) => {
+      const toggle = $('.fset__t', set);
+      set.classList.toggle('fset--fold', folding);
+      if (!folding) {
+        set.classList.remove('is-open');
+        toggle?.removeAttribute('aria-expanded');
+        return;
+      }
+      const open = set.dataset.open === '1';
+      set.classList.toggle('is-open', open);
+      toggle?.setAttribute('aria-expanded', String(open));
+    });
+  };
+
+  if (foldSets.length) {
+    applyFold();
+    foldQuery.addEventListener('change', applyFold);
+  }
+
   /* ── flashes dismiss themselves ─────────────────────────────────────────── */
   $$('.flash').forEach((flash, index) => {
     $('button', flash)?.addEventListener('click', () => flash.remove());

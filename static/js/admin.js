@@ -36,6 +36,54 @@
   scrim?.addEventListener('click', closeSide);
   sideSync();
 
+  /* ── the sidebar keeps its place ──────────────────────────────────────────
+     Every click in the panel is a full page load, and the nav is taller than a
+     laptop screen, so the group you were working in scrolled back out of sight on
+     each one and had to be found again before the next click. The offset is
+     remembered for the tab and put back here, which runs before the first paint. */
+  const nav = $('.side__nav');
+  if (nav) {
+    const KEY = 'aruka.nav.scroll';
+    const store = (() => {
+      try { sessionStorage.getItem(KEY); return sessionStorage; } catch (err) { return null; }
+    })();
+
+    const saved = store && store.getItem(KEY);
+    const settle = () => {
+      if (saved !== null && saved !== undefined) nav.scrollTop = Number(saved) || 0;
+
+      // A first visit has nothing remembered, and a short window can leave the
+      // current section below the fold even with the offset restored. Either way
+      // the section you are actually in is what belongs in front of you.
+      const live = $('.side__a.is-on', nav);
+      if (!live) return;
+      const item = live.getBoundingClientRect();
+      const frame = nav.getBoundingClientRect();
+      if (item.top < frame.top || item.bottom > frame.bottom) {
+        nav.scrollTop += item.top - frame.top - (frame.height - item.height) / 2;
+      }
+    };
+    // Twice: once now, and once after the first layout. This script runs before the
+    // nav has its final height, and until it has one the browser clamps any offset
+    // past the bottom to whatever fits so far - which lands you near the top again,
+    // the exact thing this is here to stop.
+    settle();
+    requestAnimationFrame(settle);
+
+    const remember = () => {
+      if (store) store.setItem(KEY, String(Math.round(nav.scrollTop)));
+    };
+    let queued = 0;
+    nav.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = requestAnimationFrame(() => { queued = 0; remember(); });
+    }, { passive: true });
+    // A click navigates away before the next scroll frame runs, so the offset is
+    // written at the moment the link is taken as well.
+    nav.addEventListener('click', remember);
+    window.addEventListener('pagehide', remember);
+  }
+
   // The sticky sidebar and calculator rail offset themselves from the real
   // header height, which changes when the action buttons wrap onto two rows.
   const topbar = $('.top');
@@ -58,6 +106,130 @@
     $('.flash__x', el)?.addEventListener('click', () => dismiss(el));
     setTimeout(() => dismiss(el), 6000);
   });
+
+  /* ── dropdowns ──────────────────────────────────────────────────────────────
+     The popup is the one piece of a form the browser draws itself, and on Windows
+     it draws a grey list in the system font that belongs to no design at all. The
+     <select> is left in place and untouched - it is still what the form posts, what
+     a keyboard drives and what a screen reader reads - and the native popup is
+     suppressed for the pointer only, with this list drawn over it instead.
+
+     Keyboard use is deliberately left alone. A select that has focus already opens,
+     filters by typing and commits on Enter, and none of that is worth reimplementing
+     badly. This exists because a mouse click deserved to see the panel's own list. */
+  (() => {
+    let panel = null, owner = null, items = [], here = -1;
+
+    const shut = () => {
+      if (!panel) return;
+      panel.remove();
+      owner?.classList.remove('is-open');
+      panel = null; owner = null; items = []; here = -1;
+    };
+
+    const mark = (next) => {
+      if (here >= 0) items[here]?.classList.remove('is-here');
+      here = next;
+      if (here >= 0) {
+        items[here].classList.add('is-here');
+        items[here].scrollIntoView({ block: 'nearest' });
+      }
+    };
+
+    const commit = (option) => {
+      const select = owner;
+      shut();
+      if (!select || option.disabled) return;
+      if (select.value === option.value) { select.focus(); return; }
+      select.value = option.value;
+      select.focus();
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    // Below the control if there is room for it, above if there is not, and never
+    // taller than the gap it has to live in.
+    const place = () => {
+      if (!panel || !owner) return;
+      const box = owner.getBoundingClientRect();
+      const gapBelow = window.innerHeight - box.bottom - 10;
+      const gapAbove = box.top - 10;
+      const below = gapBelow >= Math.min(panel.scrollHeight, 200) || gapBelow >= gapAbove;
+      panel.style.maxHeight = Math.max(120, Math.floor(below ? gapBelow : gapAbove)) + 'px';
+      panel.style.minWidth = Math.round(box.width) + 'px';
+      panel.style.left = Math.round(
+        Math.min(box.left, window.innerWidth - panel.offsetWidth - 8)) + 'px';
+      panel.style.top = below
+        ? Math.round(box.bottom + 4) + 'px'
+        : Math.round(box.top - panel.offsetHeight - 4) + 'px';
+    };
+
+    const open = (select) => {
+      shut();
+      owner = select;
+      select.classList.add('is-open');
+      panel = document.createElement('div');
+      panel.className = 'menu';
+      panel.setAttribute('role', 'presentation');
+
+      let seen = null;
+      Array.from(select.options).forEach((option) => {
+        const group = option.parentElement;
+        if (group && group.tagName === 'OPTGROUP' && group !== seen) {
+          seen = group;
+          const label = document.createElement('div');
+          label.className = 'menu__l';
+          label.textContent = group.label;
+          panel.appendChild(label);
+        }
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'menu__i' + (option.selected ? ' is-on' : '');
+        row.textContent = option.textContent.trim() || option.value;
+        row.disabled = option.disabled || (group && group.tagName === 'OPTGROUP' && group.disabled);
+        row.addEventListener('click', () => commit(option));
+        panel.appendChild(row);
+      });
+
+      document.body.appendChild(panel);
+      items = $$('.menu__i', panel).filter((row) => !row.disabled);
+      place();
+      const chosen = items.indexOf($('.menu__i.is-on', panel));
+      mark(chosen >= 0 ? chosen : (items.length ? 0 : -1));
+    };
+
+    document.addEventListener('mousedown', (event) => {
+      const select = event.target.closest?.('select.in');
+      if (!select || select.multiple || select.size > 1 || select.disabled) {
+        if (panel && !event.target.closest('.menu')) shut();
+        return;
+      }
+      // Stops the native popup. Focus normally comes with the mousedown that was
+      // just cancelled, so it is asked for explicitly.
+      event.preventDefault();
+      if (owner === select) { shut(); select.focus(); return; }
+      open(select);
+      select.focus();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (!panel) return;
+      const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape', 'Tab'];
+      if (!keys.includes(event.key)) return;
+      if (event.key === 'Escape' || event.key === 'Tab') { shut(); return; }
+      event.preventDefault();
+      if (event.key === 'Enter' || event.key === ' ') { items[here]?.click(); return; }
+      if (event.key === 'Home') return mark(0);
+      if (event.key === 'End') return mark(items.length - 1);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      mark(Math.min(items.length - 1, Math.max(0, here + step)));
+    });
+
+    // Anything that moves the control out from under the panel closes it, rather
+    // than leaving a list floating over an unrelated part of the page.
+    window.addEventListener('resize', shut);
+    window.addEventListener('scroll', shut, { capture: true, passive: true });
+  })();
 
   function toast(message, isError) {
     let host = $('#flashes');

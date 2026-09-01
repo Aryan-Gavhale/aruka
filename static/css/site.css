@@ -475,6 +475,7 @@ li::marker { color: var(--fg-faint); }
   border-right: 1px solid var(--line);
 }
 @keyframes slide { to { transform: translateX(-50%); } }
+@keyframes fold { from { opacity: 0; transform: translateY(-5px); } }
 
 /* ── grids ────────────────────────────────────────────────────────────────
    Each of these declares display:grid itself rather than relying on .grid being
@@ -731,6 +732,16 @@ a.card:hover { transform: translateY(-3px); }
   letter-spacing: -0.014em;
 }
 .fset__h { font-size: 0.88rem; color: var(--fg-muted); margin-bottom: 18px; }
+
+/* The legend becomes a button so that on a phone it can be the thing you tap to
+   open the group. On anything wider it has to read as the plain heading it always
+   was, which is what this strips it back to. */
+.fset__t {
+  display: block; width: 100%; padding: 0; border: 0; background: none;
+  text-align: left; color: inherit; font: inherit; cursor: default;
+}
+.fset__n { display: none; }
+.fset__b { display: block; }
 
 .opts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
 .opt {
@@ -1305,8 +1316,71 @@ html.no-js .draw path { stroke-dashoffset: 0; }
   /* Anything under 16px makes iOS Safari zoom the page the moment it is tapped
      into, and it does not zoom back out. Cheaper to give up the tighter type. */
   .in { font-size: 16px; }
-  .g2, .g3, .g4, .plans, .work, .stats, .f2, .sla { grid-template-columns: 1fr; }
-  .stat + .stat, .sla__i + .sla__i { border-left: 0; border-top: 1px solid var(--line); }
+  /* A row of three cards used to become three full-width cards, which is a screen
+     and a half of scrolling to get through one section. On a phone the row becomes a
+     rail you swipe instead: one card at a time, snapped, with the next one showing at
+     the edge so it is obvious there is more.
+
+     It bleeds to both edges of the screen, which is what makes it read as a rail
+     rather than a grid that got cropped. The negative margin is exactly the padding
+     .wrap applies, so the rail comes out the width of the screen and the page still
+     does not scroll sideways - and it is scoped to a direct child of .wrap, because
+     that is the only place the two are guaranteed to cancel. */
+  .wrap > .g3, .wrap > .g4, .wrap > .g-auto, .wrap > .work, .wrap > .plans {
+    margin-inline: calc(-1 * clamp(20px, 4vw, 44px));
+    padding-inline: clamp(20px, 4vw, 44px);
+    scroll-padding-inline-start: clamp(20px, 4vw, 44px);
+  }
+  .g3, .g4, .g-auto, .work, .plans {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 82%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    /* overflow-x on its own forces overflow-y to match, so the lift and the shadow a
+       card takes on approach need a few pixels to live in. */
+    padding-block: 3px 10px;
+    scrollbar-width: none;
+  }
+  .g3::-webkit-scrollbar, .g4::-webkit-scrollbar, .g-auto::-webkit-scrollbar,
+  .work::-webkit-scrollbar, .plans::-webkit-scrollbar { display: none; }
+  .g3 > *, .g4 > *, .g-auto > *, .work > *, .plans > * { scroll-snap-align: start; }
+
+  /* Each option group becomes a row you tap open. The fieldset draws no box of its
+     own - hairlines between the rows are what make it read as a list - and the
+     legend is switched to a plain block so it stops notching the rule above it. */
+  .fset--fold { margin: 0; border-bottom: 1px solid var(--line); }
+  .fset--fold:first-of-type { border-top: 1px solid var(--line); }
+  .fset--fold > legend { display: block; width: 100%; padding: 0; }
+  .fset--fold .fset__t {
+    display: flex; align-items: center; gap: 10px; padding: 17px 2px;
+    cursor: pointer; font-weight: 600; font-size: 1rem;
+    color: var(--fg-strong); letter-spacing: -0.014em;
+  }
+  .fset--fold .fset__n {
+    display: block; margin-left: auto;
+    font-size: 0.78rem; font-weight: 450; color: var(--fg-muted);
+  }
+  .fset--fold .fset__t::after {
+    content: ''; flex: none; width: 7px; height: 7px;
+    border: solid var(--fg-muted); border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg); transition: transform 0.22s var(--ease);
+  }
+  .fset--fold.is-open .fset__t::after { transform: rotate(-135deg); }
+  .fset--fold > .fset__b { display: none; }
+  .fset--fold.is-open > .fset__b {
+    display: block; padding-bottom: 20px;
+    animation: fold 0.3s var(--ease) both;
+  }
+  /* The options inside an open group keep the full width. Squeezing two into a row
+     was worth it while every group was open at once; now that only one is, an option
+     with a sentence under it would rather have the line than the saved pixels. */
+
+  .g2, .f2 { grid-template-columns: 1fr; }
+  /* .stats and .sla are four short number tiles. They were given a sensible two-up
+     with the right dividers at the wider breakpoints, and two rows of two beats four
+     rows of one on a phone too, so they are deliberately left as they are. */
   .ftr__g { grid-template-columns: 1fr; }
   .btns .btn { width: 100%; }
   .flashes { top: auto; bottom: 86px; right: 14px; left: 14px; width: auto; }
