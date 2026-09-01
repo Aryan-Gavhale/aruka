@@ -2,26 +2,42 @@
    than living in the stylesheet. This is the one reason the CSP allows inline
    styles but not inline scripts.
 
+   The derived values are here rather than in site.css because each is a mix of two
+   database colours, and CSS cannot mix a value it has not been handed yet. Every
+   mix is expressed against the canvas or the ink, so an owner who changes the
+   paper colour gets a set of tints that still belong to it.
+
    Included by both the public layout and the portal layout, because a client who
    signs in should land in the same brand they just left. #}
 <style>
 :root {
   --primary: {{ theme.primary }};
   --primary-dark: {{ theme.primary_dark }};
-  --primary-wash: color-mix(in srgb, {{ theme.primary }} 13%, transparent);
-  --primary-glow: color-mix(in srgb, {{ theme.primary }} 42%, transparent);
+  /* Washes are much fainter than they would be on a dark canvas: a 13% tint that
+     reads as a hint over near-black reads as a stain over paper. */
+  --primary-wash: color-mix(in srgb, {{ theme.primary }} 5%, transparent);
+  --primary-glow: color-mix(in srgb, {{ theme.primary }} 13%, transparent);
   --accent: {{ theme.accent }};
-  --accent-wash: color-mix(in srgb, {{ theme.accent }} 13%, transparent);
+  --accent-wash: color-mix(in srgb, {{ theme.accent }} 8%, transparent);
   --warm: {{ theme.warm }};
+
   --canvas: {{ theme.canvas }};
   --surface-1: {{ theme.surface }};
-  --surface-2: color-mix(in srgb, {{ theme.surface }} 72%, {{ theme.canvas }});
+  /* A well rather than a card: one step into the paper, where surface-1 is one
+     step out of it. */
+  --surface-2: color-mix(in srgb, {{ theme.canvas }} 94%, {{ theme.ink }});
+  --surface-3: color-mix(in srgb, {{ theme.canvas }} 88%, {{ theme.ink }});
+
   --line: {{ theme.line }};
-  --line-strong: color-mix(in srgb, {{ theme.line }} 55%, {{ theme.muted }});
-  --fg: color-mix(in srgb, #ffffff 86%, {{ theme.muted }});
-  --fg-strong: #ffffff;
+  --line-strong: color-mix(in srgb, {{ theme.line }} 58%, {{ theme.muted }});
+
+  --ink: {{ theme.ink }};
+  --ink-soft: {{ theme.ink_soft }};
+  --fg: color-mix(in srgb, {{ theme.ink }} 90%, {{ theme.canvas }});
+  --fg-strong: {{ theme.ink }};
   --fg-muted: {{ theme.muted }};
-  --fg-faint: color-mix(in srgb, {{ theme.muted }} 62%, {{ theme.canvas }});
+  --fg-faint: color-mix(in srgb, {{ theme.muted }} 56%, {{ theme.canvas }});
+
   --radius: {{ theme.radius }}px;
   --font-display: '{{ theme.font_display }}';
   --font-body: '{{ theme.font_body }}';

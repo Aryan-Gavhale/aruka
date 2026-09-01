@@ -52,22 +52,27 @@ DEFAULTS: dict = {
     "social.google_review_url": "",
 
     # ── theme ───────────────────────────────────────────────────────────────
-    "theme.primary": "#6C4BF4",
-    "theme.primary_dark": "#4A2FD0",
-    "theme.accent": "#25E6A5",
-    "theme.warm": "#FF8A4C",
-    "theme.ink": "#0B0A14",
-    "theme.ink_soft": "#1A1826",
-    "theme.muted": "#8A87A0",
-    "theme.surface": "#12111C",
-    "theme.canvas": "#08070F",
-    "theme.line": "#241F38",
-    "theme.radius": "18",
-    "theme.font_display": "Sora",
+    # Warm paper, near-black ink, one rust accent, and a serif that carries the
+    # headlines. The primary is ink rather than a colour on purpose: a saturated
+    # brand hue on every button is what makes a site look generated, and it leaves
+    # nothing louder for the accent to be.
+    "theme.primary": "#17140F",
+    "theme.primary_dark": "#000000",
+    "theme.accent": "#B8431C",
+    "theme.warm": "#A6741A",
+    "theme.ink": "#17140F",
+    "theme.ink_soft": "#2C2720",
+    "theme.muted": "#6B6459",
+    "theme.surface": "#FFFFFF",
+    "theme.canvas": "#F5F2EB",
+    "theme.line": "#E1DBCE",
+    # Six, not eighteen. A large radius on every corner reads as a template.
+    "theme.radius": "6",
+    "theme.font_display": "Instrument Serif",
     "theme.font_body": "Inter",
     "theme.font_url": (
         "https://fonts.googleapis.com/css2?"
-        "family=Sora:wght@400;500;600;700;800&"
+        "family=Instrument+Serif:ital@0;1&"
         "family=Inter:wght@300..700&display=swap"
     ),
     "theme.animations": True,

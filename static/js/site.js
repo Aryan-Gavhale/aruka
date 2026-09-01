@@ -167,8 +167,12 @@
       });
 
     const run = (el) => {
-      const target = Number(el.dataset.count) || 0;
-      const decimals = (el.dataset.count.split('.')[1] || '').length;
+      const raw = String(el.dataset.count || '');
+      const target = Number(raw) || 0;
+      // A stat stored as 40.0 is the number forty, not forty to one decimal place.
+      // The column is a REAL, so every whole number arrives with a .0 on it and the
+      // headline figures were rendering as "40.0+" and "92.0%".
+      const decimals = (raw.split('.')[1] || '').replace(/0+$/, '').length;
       if (!motionOK) { el.textContent = format(target, decimals); return; }
 
       const started = performance.now();
@@ -228,6 +232,52 @@
     addEventListener('resize', onScroll);
     onMotionChange.push((ok) => {
       if (!ok) layers.forEach((el) => { el.style.transform = ''; });
+    });
+  }
+
+  /* ── the process sequence tracks the scroll ───────────────────────────────
+     Whichever step is nearest the middle of the viewport is the live one, and the
+     rule beside it fills. It reads as walking through the process rather than as
+     four paragraphs that happen to be numbered.
+
+     The portal renders .steps too, for launch milestones, and is deliberately
+     still - a client checking what is left to do is not being told a story.
+     ───────────────────────────────────────────────────────────────────────── */
+  const stepGroups = document.documentElement.classList.contains('portal') ? [] : $$('.steps');
+  if (stepGroups.length) {
+    let queued = false;
+    const mark = () => {
+      queued = false;
+      if (!motionOK) return;
+      const middle = innerHeight * 0.46;
+      stepGroups.forEach((group) => {
+        const items = $$('.steps__i', group);
+        let live = null;
+        let closest = Infinity;
+        items.forEach((item) => {
+          const box = item.getBoundingClientRect();
+          const gap = Math.abs(box.top + box.height / 2 - middle);
+          if (gap < closest) { closest = gap; live = item; }
+        });
+        // Only claim a step while the group is actually in front of the reader,
+        // otherwise the last one stays lit for the rest of the page.
+        const near = closest < innerHeight * 0.6;
+        items.forEach((item) => item.classList.toggle('is-on', near && item === live));
+      });
+    };
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(mark);
+    };
+    mark();
+    addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('resize', onScroll);
+    onMotionChange.push((ok) => {
+      if (ok) mark();
+      // Still means every rule drawn, not every rule blank: the sequence is
+      // information, so it resolves rather than disappearing.
+      else $$('.steps__i').forEach((item) => item.classList.remove('is-on'));
     });
   }
 

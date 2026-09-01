@@ -75,9 +75,9 @@
       {% endif %}
     </div>
 
-    {# The card stack is decoration that happens to say something true: this is
-       what the first week with us looks like. #}
-    <div class="stack r r--right" style="--d:200ms" aria-hidden="true">
+    {# Four promises, in one panel with hairline rows. It drifts at a different rate
+       from the wash behind it, which is where the depth in the hero comes from. #}
+    <div class="stack r r--right" style="--d:200ms" data-para="-0.04" aria-hidden="true">
       <div class="stack__c">
         <div class="mini">
           <span class="mini__i">{{ ico('doc') }}</span>
@@ -118,7 +118,9 @@
     {{ sec_head('What we do', 'Four things, done properly',
                 'A studio that says no to the rest. Each of these has a page with the
                  scope, the timeline and what it costs.') }}
-    <div class="grid g3">
+    {# g-auto rather than g3: there are four services, and a three-column rule
+       leaves the fourth stranded on a row of its own. #}
+    <div class="grid g-auto">
       {% for row in services %}{{ service_card(row, numbered=true, index=loop.index0) }}{% endfor %}
     </div>
     <div class="btns mt">

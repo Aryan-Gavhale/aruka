@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title }} &middot; {{ brand_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 </head>
 <body>
 <main class="auth">
   <div class="auth__box" style="text-align:center">
-    <div class="kpi__l" style="font-size:52px; font-weight:800; color:var(--ink-3); letter-spacing:-.03em">{{ code }}</div>
+    <div class="kpi__l" style="font-size:52px; font-weight:600; color:var(--line-2); letter-spacing:-.03em">{{ code }}</div>
     <h1 style="margin:6px 0 8px">{{ title }}</h1>
     {% if message %}<p class="auth__sub">{{ message }}</p>{% endif %}
     <div class="row" style="justify-content:center; margin-top:10px">

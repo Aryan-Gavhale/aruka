@@ -51,15 +51,17 @@ def _palette() -> dict:
         except (ValueError, AttributeError):
             return colors.HexColor(fallback)
 
+    # The same warm paper and near-black ink as the website, so an invoice that
+    # arrives by email is recognisably from the studio the client just visited.
     return {
-        "brand": pick("theme.accent", "#7C5CFF"),
-        "ink": colors.HexColor("#14161C"),
-        "body": colors.HexColor("#33384A"),
-        "mute": colors.HexColor("#767C90"),
-        "line": colors.HexColor("#DDE0EA"),
-        "wash": colors.HexColor("#F5F6FA"),
-        "good": colors.HexColor("#1B8A5A"),
-        "bad": colors.HexColor("#C0392B"),
+        "brand": pick("theme.accent", "#B8431C"),
+        "ink": colors.HexColor("#17140F"),
+        "body": colors.HexColor("#3A342B"),
+        "mute": colors.HexColor("#7C7466"),
+        "line": colors.HexColor("#DED8CB"),
+        "wash": colors.HexColor("#F7F5F0"),
+        "good": colors.HexColor("#1E7A4B"),
+        "bad": colors.HexColor("#B32036"),
     }
 
 

@@ -5,8 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>{{ title }} &middot; {{ brand_name }} admin</title>
+{# Only the grotesk. The panel has no headlines, so it never needs the display face
+   the public site loads, and the desk should not wait on a second file to paint. #}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237C5CFF'/><text x='16' y='23' font-family='sans-serif' font-weight='700' font-size='18' fill='white' text-anchor='middle'>A</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2317140F'/><text x='16' y='23' font-family='sans-serif' font-weight='600' font-size='18' fill='white' text-anchor='middle'>A</text></svg>">
 </head>
 <body>
 {% from "admin/_icons.html" import ico %}

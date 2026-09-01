@@ -77,14 +77,19 @@
 
           <div class="fi fi--4">
             <label for="complexity">Complexity</label>
+            {# Short labels because the closed control is a third of a row wide and
+               was cutting the long ones off mid-word. What each one means is on the
+               hint underneath, where there is room for it. #}
             <select class="in" id="complexity" name="complexity" data-calc-input>
-              <option value="1">Standard - brochure-style, no integrations</option>
-              <option value="1.25">A bit more - custom forms, one integration</option>
-              <option value="1.5">Involved - logins, dashboards, a design system</option>
-              <option value="2">Heavy - custom logic, several integrations</option>
-              <option value="2.5">Bespoke - it is really a product</option>
+              <option value="1">Standard &mdash; 1x</option>
+              <option value="1.25">A bit more &mdash; 1.25x</option>
+              <option value="1.5">Involved &mdash; 1.5x</option>
+              <option value="2">Heavy &mdash; 2x</option>
+              <option value="2.5">Bespoke &mdash; 2.5x</option>
             </select>
-            <span class="hint">Scales the build, not the discount.</span>
+            <span class="hint">Scales the build, not the discount. Standard is a
+              brochure site; involved means logins and dashboards; bespoke means it
+              is really a product.</span>
           </div>
 
           <div class="fi fi--4">
@@ -217,7 +222,7 @@
         <dl class="quote__sums">
           <dt>Costs you</dt><dd data-calc-cost>&#8377;0</dd>
           <dt>Margin</dt><dd data-calc-margin>&#8377;0</dd>
-          <dt>Margin</dt><dd data-calc-margin-pct>0%</dd>
+          <dt>As a share</dt><dd data-calc-margin-pct>0%</dd>
         </dl>
       </div>
       {% endif %}
