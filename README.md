@@ -85,6 +85,10 @@ It is a normal WSGI app: `create_app()` in `app.py`. Behind gunicorn or waitress
 `static/uploads`, `db/aruka.db` and `db/vault.key` on persistent storage. SQLite is the
 right call for one agency; the whole database is a single file you can copy.
 
+**PythonAnywhere (free tier):** step-by-step guide in [`deploy/pythonanywhere.md`](deploy/pythonanywhere.md).
+Clone the repo, run `bash deploy/setup_pythonanywhere.sh`, point the Web tab at `wsgi.py`,
+and reload.
+
 One thing wants a cron job:
 
 ```
