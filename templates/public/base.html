@@ -186,10 +186,19 @@
           {% for item in footer_items %}
           <li><a href="{{ item.url }}">{{ item.label }}</a></li>
           {% endfor %}
-          <li><a href="{{ url_for('public.work') }}">Work</a></li>
-          <li><a href="{{ url_for('public.insights') }}">Insights</a></li>
-          <li><a href="{{ url_for('public.support') }}">Support</a></li>
-          <li><a href="{{ url_for('portal.login') }}">Client login</a></li>
+          {# The four below are always here whether or not anyone put them in the nav
+             config, so they are only added when the config has not already listed
+             them - otherwise Support and the client login show up twice. #}
+          {% set listed = footer_items | map(attribute='url') | map('trim', '/') | list %}
+          {% for label, href in [
+               ('Work', url_for('public.work')),
+               ('Insights', url_for('public.insights')),
+               ('Support', url_for('public.support')),
+               ('Client login', url_for('portal.login'))] %}
+          {% if (href | trim('/')) not in listed %}
+          <li><a href="{{ href }}">{{ label }}</a></li>
+          {% endif %}
+          {% endfor %}
         </ul>
       </div>
 

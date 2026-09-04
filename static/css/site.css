@@ -288,6 +288,11 @@ li::marker { color: var(--fg-faint); }
   background: var(--surface-1); border: 1px solid var(--line-strong);
   border-radius: var(--r-md); cursor: pointer; padding: 0;
   place-items: center;
+  /* Without this the three rows stretch to fill the button and the bars end up 14.8px
+     apart, so the 6px the close transform moves them lands nowhere near the middle and
+     the cross comes out as a bent arrow. Packed rows put the bars exactly 6px apart -
+     one bar plus one margin - which is the distance that transform is measured in. */
+  align-content: center;
 }
 .burger span {
   display: block; width: 18px; height: 1.5px; background: var(--fg-strong);
@@ -1301,8 +1306,44 @@ html.no-js .draw path { stroke-dashoffset: 0; }
 }
 
 @media (max-width: 860px) {
-  .nav, .hdr__cta .btn--ghost { display: none; }
-  .burger { display: grid; }
+  /* The header keeps the mark and the menu, nothing else. "Get a price" and "Start a
+     project" both live in the drawer, and the hero already opens with the same call -
+     two of them a thumb-width apart read as a mistake rather than as emphasis. */
+  .nav, .hdr__cta .btn { display: none; }
+  /* With the nav gone its margin-left:auto goes with it, which is what left the menu
+     button sitting against the wordmark instead of out at the edge. */
+  .hdr__cta { margin-left: auto; }
+
+  /* Ink square, paper lines: the same two colours as everything else, so the one
+     control in the header reads as drawn rather than as a default. The line geometry
+     is left alone because the close transform below is measured from it. */
+  .burger {
+    display: grid; width: 42px; height: 42px;
+    background: var(--ink); border-color: var(--ink);
+    box-shadow: 0 1px 2px rgb(23 20 15 / 0.14);
+  }
+  .burger:active { transform: scale(0.96); }
+  .burger span { width: 20px; background: var(--canvas); }
+
+  /* The drawer's two calls sit at the foot of the sheet rather than floating under
+     the last link, with a rule above them so they read as the drawer's own footer. */
+  .drawer .btns {
+    margin-top: auto; padding-top: 24px; gap: 10px;
+    border-top: 1px solid var(--line);
+  }
+  /* A shared height rather than natural ones: the WhatsApp mark makes its own line box
+     4px taller than the plain label next to it, which is exactly enough to read as
+     two buttons that do not match. */
+  .drawer .btns .btn { min-height: 52px; padding: 12px 22px; font-size: 0.95rem; }
+  /* WhatsApp as an outline with a green mark, not a green slab. A saturated block
+     that wide is the loudest thing on a paper-coloured sheet, and it is the second
+     call here, not the first. */
+  .drawer .btn--wa {
+    --btn-bg: transparent; --btn-fg: var(--fg-strong); --btn-wipe: var(--surface-1);
+    border-color: var(--line-strong);
+  }
+  .drawer .btn--wa svg { color: #128C7E; }
+
   .hero { padding-top: clamp(112px, 22vw, 150px); }
   .hero__grid { grid-template-columns: 1fr; }
   .stack { display: none; }
@@ -1336,16 +1377,49 @@ html.no-js .draw path { stroke-dashoffset: 0; }
     grid-auto-flow: column;
     grid-auto-columns: 82%;
     overflow-x: auto;
+    /* Sideways only. Setting overflow-x alone makes the browser compute overflow-y as
+       auto to match, which turned every rail into a box you could also drag up and
+       down by a few pixels - two axes fighting each other under one thumb. */
+    overflow-y: hidden;
     scroll-snap-type: x mandatory;
     overscroll-behavior-x: contain;
-    /* overflow-x on its own forces overflow-y to match, so the lift and the shadow a
-       card takes on approach need a few pixels to live in. */
-    padding-block: 3px 10px;
+    padding-block: 2px 8px;
     scrollbar-width: none;
   }
   .g3::-webkit-scrollbar, .g4::-webkit-scrollbar, .g-auto::-webkit-scrollbar,
   .work::-webkit-scrollbar, .plans::-webkit-scrollbar { display: none; }
   .g3 > *, .g4 > *, .g-auto > *, .work > *, .plans > * { scroll-snap-align: start; }
+  /* Cards in a rail fade in where they stand instead of rising into place. The rise is
+     22px of vertical travel, and inside a horizontal scroller with the vertical axis
+     clipped that is 22px of the card cut off while it arrives. */
+  .g3 .r, .g4 .r, .g-auto .r, .work .r, .plans .r { transform: none; }
+
+  /* One plan per screen. At 82% the next card showed just enough of itself to crop its
+     own "Most chosen" flag against the edge of the rail, which read as a rendering
+     fault rather than as an invitation to swipe. */
+  .plans { grid-auto-columns: 100%; }
+  /* And the flag stops overhanging the corner: on a phone it is a chip at the top of
+     the card, in the flow, where nothing can clip it. */
+  .plan__flag {
+    position: static; transform: none; align-self: flex-start;
+    margin-bottom: 12px; padding: 4px 9px;
+  }
+  /* Shorter cards, so a plan is about a screen rather than a screen and a half. Every
+     line of the card is still here - the feature list is the reason anyone reads a
+     price - it is the air between them that comes out. */
+  .plan { padding: 18px 18px 20px; }
+  .plan h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  .plan__for { min-height: 0; margin-bottom: 12px; font-size: 0.84rem; }
+  .plan__p { margin-bottom: 2px; }
+  .plan__p b { font-size: 2rem; }
+  .plan__from { margin-bottom: 12px; font-size: 0.76rem; }
+  .plan .ticks { margin: 0 0 14px; }
+  .plan .ticks li {
+    margin-bottom: 5px; font-size: 0.85rem; padding-left: 21px; line-height: 1.4;
+  }
+  .plan .ticks li::before { width: 11px; height: 6px; }
+  .plan .btn { padding: 12px 20px; }
+  .plan__t { margin-top: 9px; font-size: 0.74rem; }
 
   /* Each option group becomes a row you tap open. The fieldset draws no box of its
      own - hairlines between the rows are what make it read as a list - and the
@@ -1381,7 +1455,37 @@ html.no-js .draw path { stroke-dashoffset: 0; }
   /* .stats and .sla are four short number tiles. They were given a sensible two-up
      with the right dividers at the wider breakpoints, and two rows of two beats four
      rows of one on a phone too, so they are deliberately left as they are. */
-  .ftr__g { grid-template-columns: 1fr; }
+  /* Four stacked blocks of links made the footer longer than most of the pages above
+     it. The brand keeps the full width because the wordmark and the socials need it;
+     the three link lists sit two-up underneath at a tighter rhythm. */
+  .ftr { padding: 28px 0 18px; margin-top: 40px; }
+  .ftr__g { grid-template-columns: 1fr 1fr; gap: 20px 18px; }
+  /* The wordmark and the socials keep the full width; the three link lists go two-up
+     underneath, with the third dropping onto its own row. */
+  .ftr__g > :first-child { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
+  /* Contact goes full width as a wrapping row rather than a third column. Two columns
+     and three lists left one cell empty next to the longest of them, which is where a
+     third of the footer's height was going. */
+  .ftr__g > :last-child { grid-column: 1 / -1; }
+  .ftr__g > :last-child ul { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .ftr__g > :last-child li { margin-bottom: 0; }
+  .ftr__g > :last-child li.small { flex-basis: 100%; }
+  /* The promise line is the hero's sentence again. It earns its place on a desktop
+     footer with room to spare, not on a phone where it is four wrapped lines between
+     the mark and the links. */
+  .ftr__b { display: none; }
+  .socials { margin-left: auto; }
+  .socials a { width: 32px; height: 32px; }
+  .ftr h4 { margin-bottom: 8px; }
+  .ftr li { margin-bottom: 4px; }
+  .ftr a { font-size: 0.86rem; }
+  .ftr li.small { font-size: 0.76rem; line-height: 1.4; }
+  .ftr__end {
+    margin-top: 18px; padding-top: 13px;
+    gap: 6px 14px; font-size: 0.75rem;
+  }
+  .ftr__end nav { gap: 4px 14px; }
+
   .btns .btn { width: 100%; }
   .flashes { top: auto; bottom: 86px; right: 14px; left: 14px; width: auto; }
   .steps__i { grid-template-columns: 38px 1fr; gap: 14px; padding-left: 14px; }
